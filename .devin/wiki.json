@@ -1,0 +1,193 @@
+{
+  "repo_notes": [
+    {
+      "content": ""
+    }
+  ],
+  "pages": [
+    {
+      "title": "Overview",
+      "purpose": "High-level introduction to openclaw-secure-deploy: what it is, why it exists, the zero-trust philosophy, and how the major components fit together. Links to child pages for setup and architecture details.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Getting Started",
+      "purpose": "Step-by-step guide for first-time setup: cloning the repo, running setup.sh, populating .env and openclaw.json, and launching the stack with docker-compose. Covers prerequisites and the expected directory structure after setup.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Lifecycle Management",
+      "purpose": "How to launch, update, and shut down the OpenClaw stack. Covers docker-compose up --build --force-recreate for updates, docker-compose stop/start for pausing, and docker-compose down for full teardown. Explains why force-recreate is required for config changes to take effect.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Architecture",
+      "purpose": "Overview of the two-container architecture (openclaw agent + docker-socket-proxy), the openclaw-internal network, and the enclave directory layout on the host. Introduces the defense-in-depth model and links to child pages for each major subsystem.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Container Configuration",
+      "purpose": "Deep dive into Dockerfile.openclaw and docker-compose.yml. Covers the base image (ghcr.io/openclaw/openclaw:latest), the docker.io CLI installation, the two-stage USER root / USER node build pattern, service definitions, resource limits (2 CPU / 4 GB), tmpfs /tmp, and the openclaw-internal bridge network.",
+      "parent": "Architecture",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Docker Socket Proxy",
+      "purpose": "Explains the tecnativa/docker-socket-proxy sidecar: why direct /var/run/docker.sock access is equivalent to root, the ACL environment variables (CONTAINERS=1, IMAGES=1, POST=1, ALLOW_START=1, ALLOW_STOP=1, EXEC=0, VOLUMES=0, NETWORKS=0, etc.), the DOCKER_HOST=tcp://docker-socket-proxy:2375 environment variable in the openclaw container, and the privileged: true caveat.",
+      "parent": "Architecture",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Enclave Directory Structure and Volume Mounts",
+      "purpose": "Documents the openclaw-enclave/ host directory tree created by setup.sh, and maps each subdirectory to its container mount point and read/write mode. Covers openclaw-secure-config (rw for state, ro overlay for openclaw.json), workspace (rw), scripts (ro), and the projects folder (configurable via HOST_PROJECTS_1_PATH / CONTAINER_PROJECTS_1_PATH).",
+      "parent": "Architecture",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Security Model",
+      "purpose": "Overview of the zero-trust security philosophy, the layered defenses, and the explicit threat model. Summarizes what the system protects against and what it does not. Links to child pages for each security layer and for verification procedures.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Container Hardening",
+      "purpose": "Details every kernel-level and Docker-level hardening measure applied to the openclaw container: read_only: true root filesystem, cap_drop: ALL, no-new-privileges:true, non-root node user, and the 256 MB tmpfs /tmp. Explains what each control prevents and how they interact.",
+      "parent": "Security Model",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Network Isolation",
+      "purpose": "Covers the two-network topology: openclaw-internal (internal: true, proxy-only) and the default network (outbound internet for LLM APIs and web search). Documents the 127.0.0.1:18789 loopback binding, Cloudflare/Google DNS, and the optional fully-offline mode (marking default network as internal: true).",
+      "parent": "Security Model",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Threat Model and Residual Risks",
+      "purpose": "Documents what the security model explicitly does NOT protect against: prompt injection attacks, unknown container-escape vulnerabilities, and production/multi-user deployments. Explains the distinction between system integrity (host protection) and agent integrity (agent logic protection). Covers the outbound exfiltration path risk.",
+      "parent": "Security Model",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Security Verification Procedures",
+      "purpose": "Step-by-step audit commands to verify each security control is active: read-only filesystem test (touch /test_file), privilege escalation test (sudo su), capability drop inspection (docker inspect CapDrop), volume mount inspection (docker inspect Mounts | jq), Docker socket isolation check (ls /var/run/docker.sock), and host filesystem access check (ls /Users).",
+      "parent": "Security Model",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Application Configuration",
+      "purpose": "Overview of how OpenClaw is configured at the application level, covering the two configuration files (openclaw.json and .env) and how secrets are managed. Links to child pages for each configuration area.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "openclaw.json Reference",
+      "purpose": "Documents every major section of openclaw.json (derived from openclaw.example.json): secrets providers, compaction/contextPruning settings, sandbox configuration (docker backend, capDrop ALL, network none), loopDetection detectors and circuit breaker thresholds, gateway settings (port 18789, bind, auth token, controlUi, tailscale), denyCommands list, wizard/onboarding state, models/providers (LMStudio / Qwen 3.6 35B a3b, openai-completions protocol), Slack channel configuration, and the active-memory plugin (dreaming, persistTranscripts, queryMode).",
+      "parent": "Application Configuration",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Environment Variables and Secrets",
+      "purpose": "Documents the .env file variables: OPENCLAW_GATEWAY_AUTH_TOKEN, SLACK_BOT_TOKEN (xoxb-), SLACK_APP_TOKEN (xapp-), HOST_PROJECTS_1_PATH, and CONTAINER_PROJECTS_1_PATH. Covers the copy-if-missing bootstrap pattern from .env.example, gitignore rules that prevent secrets from being committed, and best practices for token rotation.",
+      "parent": "Application Configuration",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Workspace and Agent Runtime",
+      "purpose": "Describes the runtime environment the OpenClaw agent operates in: the workspace directory as the sole writable area, the IDENTITY.md agent persona file, the scripts directory and cron-based task scheduling, and the sandbox containers the agent can spin up for code execution.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Workspace Directory",
+      "purpose": "Details the openclaw-enclave/workspace/ directory: its role as the only read-write mount point for the agent (/home/node/.openclaw/workspace inside the container), the IDENTITY.md file schema (Name, Creature, Vibe, Emoji, Avatar fields), and how the workspace is scoped to prevent host filesystem access.",
+      "parent": "Workspace and Agent Runtime",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Cron Scripts & Background Tasks",
+      "purpose": "Explains the scripts/ directory mounted read-only at /home/node/scripts inside the container. Documents the cron-search.example.sh template: the set -euo pipefail reliability pattern, the */5 * * * * cron entry format, the /bin/bash invocation convention, and how to add custom background tasks by placing scripts in openclaw-enclave/scripts/.",
+      "parent": "Workspace and Agent Runtime",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Glossary",
+      "purpose": "Definitions of all codebase-specific terms, jargon, abbreviations, and domain concepts an onboarding engineer needs to know, with code pointers to relevant files.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    }
+  ]
+}
