@@ -10,6 +10,7 @@ openclaw-enclave/openclaw-secure-config/*
 
 # Ignore all files in workspace
 openclaw-enclave/workspace/*
+!openclaw-enclave/workspace/IDENTITY.md
 
 # Ignore all files in projects-folder
 openclaw-enclave/openclaw-projects-folder/*
@@ -19,3 +20,4 @@ openclaw-enclave/openclaw-projects-folder/*
 
 # Ignore all files in scripts
 openclaw-enclave/scripts/*
+!openclaw-enclave/scripts/cron-search.example.sh
