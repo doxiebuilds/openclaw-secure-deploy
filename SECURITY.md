@@ -2,7 +2,7 @@
 
 ## Reporting Vulnerabilities
 
-FFound a security issue? **Don't open a public issue.** Use GitHub's [private vulnerability reporting](https://github.com/doxiebuilds/openclaw-secure-deploy/security/advisories/new) instead — it opens a draft security advisory that only the maintainer can see, no email required. Include:
+Found a security issue? **Don't open a public issue.** Use GitHub's [private vulnerability reporting](https://github.com/doxiebuilds/openclaw-secure-deploy/security/advisories/new) instead — it opens a draft security advisory that only the maintainer can see, no email required. Include:
 - What you found
 - How to reproduce it
 - Which component is affected
