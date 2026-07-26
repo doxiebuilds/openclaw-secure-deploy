@@ -1,0 +1,92 @@
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: docker-socket-proxy
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - CONTAINERS=1      # read container info
+      - IMAGES=1          # check the sandbox image exists
+      - POST=1            # REQUIRED to create/start containers
+      - ALLOW_START=1
+      - ALLOW_STOP=1
+      - EXEC=0            # explicitly block exec-into-container
+      - VOLUMES=0
+      - NETWORKS=0
+      - SYSTEM=0
+      - INFO=0
+      - SWARM=0
+      - SECRETS=0
+      - CONFIGS=0
+      - AUTH=0
+      - BUILD=0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - openclaw-internal
+  openclaw:
+    build:
+        context: .
+        dockerfile: Dockerfile.openclaw
+        pull: true
+    image: openclaw-with-cli:latest
+    container_name: openclaw
+    restart: unless-stopped
+    environment:
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
+      - OPENCLAW_GATEWAY_AUTH_TOKEN=${OPENCLAW_GATEWAY_AUTH_TOKEN}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
+    # ─── Network ───
+    ports:
+      - "127.0.0.1:18789:18789"
+    dns:
+      - 1.1.1.1                              # Cloudflare DNS (needed for web search)
+      - 8.8.8.8                              # Google DNS (fallback)
+    networks:
+      - openclaw-internal
+      - default 
+    # ─── Security hardening ───
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true                           # Container root filesystem is read-only
+    tmpfs:
+      - /tmp:size=256M                        # Writable /tmp with size limit
+
+    # ─── Volumes: everything OpenClaw can reach lives under openclaw-enclave/ ───
+    volumes:
+      # Config dir: read-write (OpenClaw writes to agents/, state/, logs/, etc.)
+      - ~/Documents/openclaw/openclaw-enclave/openclaw-secure-config:/home/node/.openclaw
+
+      # Config file: read-only overlay (OpenClaw cannot modify its own config)
+      - ~/Documents/openclaw/openclaw-enclave/openclaw-secure-config/openclaw.json:/home/node/.openclaw/openclaw.json:ro
+      
+      # Block OpenClaw from reading or modifying the template file
+      - /dev/null:/home/node/.openclaw/openclaw.example.json:ro
+      
+      # Workspace: read-write (THE ONE FOLDER OpenClaw can freely write to)
+      - ~/Documents/openclaw/openclaw-enclave/workspace:/home/node/.openclaw/workspace
+
+      # Operational scripts: read-only (cron runs these; agent must not rewrite them)
+      - ~/Documents/openclaw/openclaw-enclave/scripts:/home/node/scripts:ro
+
+      # Folder to store projects and code
+      - ${HOST_PROJECTS_1_PATH}:${CONTAINER_PROJECTS_1_PATH}
+
+      # ⛔ REMOVED: /var/run/docker.sock — critical security risk
+
+    # ─── Resource limits ───
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  
+networks:
+  openclaw-internal:
+    internal: true   # proxy is unreachable from host or LAN, only from openclaw
