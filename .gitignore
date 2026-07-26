@@ -1,0 +1,21 @@
+# Secrets
+.env
+
+# Others
+*.DS_Store
+
+# Ignore all files in openclaw-secure-config except openclaw.example.json
+openclaw-enclave/openclaw-secure-config/*
+!openclaw-enclave/openclaw-secure-config/openclaw.example.json
+
+# Ignore all files in workspace
+openclaw-enclave/workspace/*
+
+# Ignore all files in projects-folder
+openclaw-enclave/openclaw-projects-folder/*
+
+# Docker
+*.sandbox
+
+# Ignore all files in scripts
+openclaw-enclave/scripts/*
