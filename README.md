@@ -10,7 +10,7 @@ Everything runs inside a locked-down Docker container. It can't escape, can't mo
 
 ## 🤝 Contributing
 
-Feedback, suggestions, issues, and feature requests are welcome!
+Issues and pull requests are limited to collaborators. If you're not one, use Discussions to share feedback, suggestions, or bugs — I'll fold in what makes sense.
 
 ---
 
