@@ -1,0 +1,107 @@
+/* Map Arco Design CSS variables onto OCP tokens so Arco components
+   (Table, Modal, Drawer, Select, Message, …) share the app palette. */
+
+:root {
+  /* Arco background scale */
+  --color-bg-1: var(--ocp-raised);
+  --color-bg-2: var(--ocp-canvas);
+  --color-bg-3: var(--ocp-panel);
+  --color-bg-4: var(--ocp-recess);
+  --color-bg-5: var(--ocp-well);
+  --color-bg-popup: var(--ocp-raised);
+  --color-bg-white: var(--ocp-raised);
+
+  /* Arco text scale */
+  --color-text-1: var(--ocp-ink);
+  --color-text-2: var(--ocp-ink-2);
+  --color-text-3: var(--ocp-ink-3);
+  --color-text-4: var(--ocp-ink-disabled);
+
+  /* Arco border / fill */
+  --color-border: var(--ocp-edge);
+  --color-border-1: var(--ocp-edge-soft);
+  --color-border-2: var(--ocp-edge);
+  --color-border-3: var(--ocp-well);
+  --color-border-4: var(--ocp-ash);
+  --color-fill-1: var(--ocp-canvas);
+  --color-fill-2: var(--ocp-panel);
+  --color-fill-3: var(--ocp-recess);
+  --color-fill-4: var(--ocp-well);
+
+  /* Arco semantic */
+  --color-primary-6: var(--ocp-accent);
+  --color-success-6: var(--ocp-ok);
+  --color-warning-6: var(--ocp-warn);
+  --color-danger-6: var(--ocp-bad);
+  --color-link-6: var(--ocp-accent);
+
+  --overlay-bg: var(--ocp-raised);
+  --overlay-text: var(--ocp-ink);
+  --overlay-border: var(--ocp-edge);
+  --overlay-shadow: var(--ocp-elev);
+}
+
+body,
+.arco-btn,
+.arco-input,
+.arco-select-view,
+.arco-table,
+.arco-modal,
+.arco-drawer {
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    'Noto Sans',
+    sans-serif;
+}
+
+code,
+pre,
+.mono,
+.arco-input.mono {
+  font-family: var(--ocp-font-mono);
+}
+
+/* Keep toasts over the main column, not the rail + sider. */
+.arco-message-wrapper {
+  padding-left: calc(var(--ocp-rail) + var(--ocp-sider));
+  z-index: 10001;
+}
+
+@media (max-width: 768px) {
+  .arco-message-wrapper {
+    padding-left: 0;
+  }
+}
+
+.arco-modal,
+.arco-drawer {
+  background: var(--ocp-raised);
+  color: var(--ocp-ink);
+}
+
+.arco-table-th {
+  background: var(--ocp-canvas);
+  color: var(--ocp-ink-2);
+}
+
+.arco-table-tr:hover .arco-table-td {
+  background: var(--ocp-hover);
+}
+
+.arco-btn-primary {
+  background: var(--ocp-accent);
+  border-color: var(--ocp-accent);
+}
+
+.arco-tabs-tab-active {
+  color: var(--ocp-accent);
+}
+
+.arco-tabs-tab-active::before {
+  background: var(--ocp-accent);
+}

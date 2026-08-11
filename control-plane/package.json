@@ -1,0 +1,27 @@
+{
+  "name": "openclaw-control-plane",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fleet control plane for the multi-cell OpenClaw enclave",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @ocp/domain && npm run build -w @ocp/gateway-client && npm run build -w @ocp/api && npm run build -w @ocp/web",
+    "dev": "npm run dev -w @ocp/api & npm run dev -w @ocp/web",
+    "dev:api": "npm run dev -w @ocp/api",
+    "dev:web": "npm run dev -w @ocp/web",
+    "typecheck": "npm run typecheck -w @ocp/domain && npm run typecheck -w @ocp/gateway-client && npm run typecheck -w @ocp/api && npm run typecheck -w @ocp/web",
+    "test": "npm run test:gateway-client && npm run test:api && npm run test:web",
+    "test:gateway-client": "cd packages/gateway-client && vitest run",
+    "test:api": "cd apps/api && vitest run",
+    "smoke": "bash scripts/smoke.sh",
+    "start:api": "npm run start -w @ocp/api",
+    "probe": "bash scripts/bootstrap/probe.sh",
+    "test:web": "cd apps/web && vitest run"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

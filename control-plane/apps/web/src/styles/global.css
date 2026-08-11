@@ -1,0 +1,254 @@
+/* Global element rules and the app-shell layout scaffolding.
+   Design tokens live in themes/; component-level UnoCSS atoms cover the rest.
+   This file is intentionally small — most spacing/color is done with utility
+   classes, not bespoke CSS, so it doesn't drift back into a second stylesheet. */
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  height: 100%;
+  background: var(--ocp-canvas);
+  color: var(--ocp-ink);
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    'Noto Sans',
+    sans-serif;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/*
+ * Kill the UA "buttonface" gray. Without this, every <button> that does not
+ * set an explicit background keeps a system gray that never follows our
+ * light/dark tokens (fleet rows, + session, topbar, drawer re-open, etc.).
+ * Utility classes (bg-accent, bg-raised, hover:bg-hover, …) still win.
+ */
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* Keep a visible outline when the browser paints autofill (common on password fields). */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--ocp-ink);
+  caret-color: var(--ocp-ink);
+  border: 1px solid var(--ocp-edge);
+  transition: background-color 99999s ease-in-out 0s;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ocp-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Soft tints (--ocp-*-soft / --ocp-*-edge) are defined in themes/palette.css. */
+
+.app-shell {
+  display: flex;
+  height: 100vh;
+  min-width: var(--ocp-min-width);
+  overflow: hidden;
+  background: var(--ocp-canvas);
+}
+
+.app-main-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.app-content-row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-content-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px 28px 48px;
+}
+
+/* Full-bleed variant for the chat surface: no padding, no scroll of its own —
+   the session page manages its own header/message-scroll/composer regions. */
+.app-content-flush {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Rail buttons.
+
+   Icons must not move under the cursor. IconPark renders a <span.i-icon> around
+   the SVG; as an inline box it can baseline-shift when color/paint changes.
+   Lock size + block layout, and use *instant* hover (no transitions/transforms).
+
+   Labels use a homemade .rail-tip (not Arco Tooltip). Arco's Trigger wraps the
+   child in ways that reflowed the flex item on hover — the tip is absolute and
+   never participates in layout. */
+.rail-nav {
+  /* Tips paint over the sider/content; do not clip them. */
+  overflow: visible;
+  z-index: 20;
+}
+
+.rail-item {
+  position: relative;
+  isolation: isolate;
+  transition: none;
+  transform: none;
+  animation: none;
+  overflow: visible;
+}
+
+.rail-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--ocp-hover);
+  opacity: 0;
+  transition: none;
+}
+
+.rail-item:hover::before {
+  opacity: 1;
+}
+
+.rail-item-active::before {
+  background: var(--ocp-press);
+  opacity: 1;
+}
+
+/* Pin the IconPark wrapper + SVG so paint changes cannot reflow the flex item. */
+.rail-item .i-icon,
+.rail-item .rail-icon {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  line-height: 0;
+  font-size: 0;
+  flex-shrink: 0;
+  vertical-align: middle;
+  transform: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+.rail-item .i-icon svg,
+.rail-item .rail-icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  transform: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+/*  custom hover label */
+.rail-tip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  margin-top: -12px; /* half of ~24px height; avoid transform on the tip's parent chain */
+  height: 24px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.82);
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  z-index: 100;
+}
+
+.rail-item:hover .rail-tip,
+.rail-item:focus-visible .rail-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Which section you are in, readable without decoding the icon. */
+.rail-item-active::after {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 10px; /* 40px button, 20px bar → centered without transform */
+  width: 3px;
+  height: 20px;
+  border-radius: 0 3px 3px 0;
+  background: var(--ocp-accent);
+}
+
+/* The transcript / timeline scroller inside a session.
+
+   `overflow-anchor: none` is load-bearing. Scroll anchoring is on by default,
+   and a transcript that re-renders while an agent is working reflows constantly
+   — so the browser keeps nudging scrollTop to hold its chosen anchor node in
+   place, undoing each wheel tick. It reads as "I scrolled up and now it is
+   stuck". We already keep the view pinned deliberately (see useAutoScroll), so
+   the browser's own attempt at it is pure interference.
+
+   `overscroll-behavior: contain` stops a scroll that reaches the end of the
+   transcript from chaining out to the shell behind it. */
+.chat-scroll {
+  overflow-y: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 768px) {
+  .app-content-scroll {
+    padding: 16px 16px 32px;
+  }
+}

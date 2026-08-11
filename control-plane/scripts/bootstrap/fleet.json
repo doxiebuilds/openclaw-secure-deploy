@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "openclawVersionObserved": "2026.7.1",
+  "protocolVersion": 4,
+  "notes": [
+    "Seed inventory for the local multi-cell enclave.",
+    "Host UI forwards bind loopback only; do not expose publicly.",
+    "Secrets live in ~/.openclaw-secrets/*.json under gateway.authToken."
+  ],
+  "gateways": [
+    {
+      "id": "main",
+      "container": "openclaw",
+      "cell": 3,
+      "hostWsUrl": "ws://127.0.0.1:18789",
+      "hostHttpBase": "http://127.0.0.1:18789",
+      "healthzPath": "/healthz",
+      "uiForwardService": "main-ui-forward",
+      "secretsFile": "openclaw-secrets.json",
+      "configDir": "openclaw-enclave/openclaw-secure-config",
+      "configFile": "openclaw-enclave/openclaw-secure-config/openclaw.json",
+      "expectedAgents": ["main", "builder", "critic"],
+      "role": "Trusted work: repo + credentials; no web tools"
+    },
+    {
+      "id": "scout",
+      "container": "openclaw-scout",
+      "cell": 1,
+      "hostWsUrl": "ws://127.0.0.1:18829",
+      "hostHttpBase": "http://127.0.0.1:18829",
+      "healthzPath": "/healthz",
+      "uiForwardService": "scout-ui-forward",
+      "secretsFile": "scout-secrets.json",
+      "configDir": "openclaw-enclave/openclaw-secure-config-scout",
+      "configFile": "openclaw-enclave/openclaw-secure-config-scout/openclaw.json",
+      "expectedAgents": ["scout"],
+      "role": "Hostile content + allowlisted egress; nothing worth stealing"
+    },
+    {
+      "id": "curator",
+      "container": "openclaw-curator",
+      "cell": 2,
+      "hostWsUrl": "ws://127.0.0.1:18869",
+      "hostHttpBase": "http://127.0.0.1:18869",
+      "healthzPath": "/healthz",
+      "uiForwardService": "curator-ui-forward",
+      "secretsFile": "curator-secrets.json",
+      "configDir": "openclaw-enclave/openclaw-secure-config-curator",
+      "configFile": "openclaw-enclave/openclaw-secure-config-curator/openclaw.json",
+      "expectedAgents": ["curator"],
+      "role": "Distill normalized briefs; no internet route"
+    }
+  ]
+}

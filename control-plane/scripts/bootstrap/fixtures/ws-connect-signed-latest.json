@@ -1,0 +1,37 @@
+{
+  "ranAt": "2026-08-09T20:07:06.221Z",
+  "deviceId": "REDACTED_DEVICE_ID_000000000000000000000000000000000000000000000000000000000000",
+  "note": "Host WS connect with signed Ed25519 device identity (control-plane own keypair).",
+  "results": [
+    {
+      "id": "main",
+      "ok": false,
+      "stage": "hello",
+      "challengeReceived": true,
+      "pairingRequired": true,
+      "pairingReason": "not-paired",
+      "requestId": "de591c1a-326a-485d-9d3f-f3d6edff8325",
+      "error": "{\"code\":\"NOT_PAIRED\",\"message\":\"pairing required: device is not approved yet\",\"details\":{\"code\":\"PAIRING_REQUIRED\",\"reason\":\"not-paired\",\"requestId\":\"de591c1a-326a-485d-9d3f-f3d6edff8325\",\"remediationHint\":\"Approve this device from the pending pairing requests.\",\"deviceId\":\"REDACTED_DEVICE_ID_0000000"
+    },
+    {
+      "id": "scout",
+      "ok": false,
+      "stage": "hello",
+      "challengeReceived": true,
+      "pairingRequired": true,
+      "pairingReason": "not-paired",
+      "requestId": "ea49e176-ef04-4dfd-88bc-990c74103a0f",
+      "error": "{\"code\":\"NOT_PAIRED\",\"message\":\"pairing required: device is not approved yet\",\"details\":{\"code\":\"PAIRING_REQUIRED\",\"reason\":\"not-paired\",\"requestId\":\"ea49e176-ef04-4dfd-88bc-990c74103a0f\",\"remediationHint\":\"Approve this device from the pending pairing requests.\",\"deviceId\":\"REDACTED_DEVICE_ID_0000000"
+    },
+    {
+      "id": "curator",
+      "ok": false,
+      "stage": "hello",
+      "challengeReceived": true,
+      "pairingRequired": true,
+      "pairingReason": "not-paired",
+      "requestId": "7e3802fc-919e-4ff4-bcea-9a3890ecd53d",
+      "error": "{\"code\":\"NOT_PAIRED\",\"message\":\"pairing required: device is not approved yet\",\"details\":{\"code\":\"PAIRING_REQUIRED\",\"reason\":\"not-paired\",\"requestId\":\"7e3802fc-919e-4ff4-bcea-9a3890ecd53d\",\"remediationHint\":\"Approve this device from the pending pairing requests.\",\"deviceId\":\"REDACTED_DEVICE_ID_0000000"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+/* diff2html ships light-only styling; these overrides keep it legible in
+   dark mode using a standard addition/deletion palette. */
+
+.d2h-wrapper {
+  color: var(--ocp-ink);
+}
+
+[data-theme='dark'] .d2h-file-header,
+[data-theme='dark'] .d2h-file-wrapper {
+  background: var(--ocp-canvas);
+  border-color: var(--ocp-edge);
+}
+
+[data-theme='dark'] .d2h-diff-table {
+  background: var(--ocp-raised);
+  color: var(--ocp-ink);
+}
+
+[data-theme='dark'] .d2h-code-line,
+[data-theme='dark'] .d2h-code-side-line {
+  color: var(--ocp-ink);
+}
+
+[data-theme='dark'] .d2h-code-linenumber,
+[data-theme='dark'] .d2h-code-side-linenumber {
+  background: var(--ocp-canvas);
+  border-color: var(--ocp-edge);
+  color: var(--ocp-ink-disabled);
+}
+
+[data-theme='dark'] .d2h-ins,
+[data-theme='dark'] .d2h-ins .d2h-code-line-ctn {
+  background-color: rgba(35, 195, 67, 0.15);
+}
+
+[data-theme='dark'] .d2h-del,
+[data-theme='dark'] .d2h-del .d2h-code-line-ctn {
+  background-color: rgba(247, 101, 96, 0.15);
+}
+
+[data-theme='dark'] .d2h-info {
+  background: var(--ocp-panel);
+  color: var(--ocp-ink-2);
+}
