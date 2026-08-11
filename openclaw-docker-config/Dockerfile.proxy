@@ -1,0 +1,49 @@
+# Minimal image for the two network sidecars: scout-egress-proxy and
+# qwen-forward.
+#
+# WHY THIS EXISTS AS A SEPARATE IMAGE.
+# Both were originally run from openclaw-hardened, because that image already
+# had python3 and reusing it meant one supply chain to patch. That was the
+# wrong trade. openclaw-hardened is 2.56 GB and contains the full OpenClaw
+# gateway (864 MB), git and node — for two components
+# whose entire job is to copy bytes between sockets.
+#
+# scout-egress-proxy sits directly between hostile fetched content and the
+# public internet. It is the single most attractive thing in the stack to
+# compromise, and it was the one carrying the most tooling. A compromised
+# forwarder should find nothing useful in its own filesystem: no interpreter
+# beyond the one it runs on, no git, no gateway binary, no package
+# manager.
+#
+# 79 MB instead of 2560 MB, and nothing in it can build, fetch or execute
+# anything the scripts do not.
+#
+# Pinned by digest for the same reason as every other base here: a rebuild must
+# never silently change what runs. To upgrade:
+#   docker pull python:3.12-alpine
+#   docker inspect python:3.12-alpine --format '{{index .RepoDigests 0}}'
+# then replace the line below deliberately.
+FROM python@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
+
+# The proxy scripts are stdlib-only by design — nothing is installed here, so
+# there is no dependency tree to audit and no pip in the running image.
+#
+# apk is removed outright. A read-only rootfs already prevents installs, but
+# removing the package manager means a compromise that somehow gains write
+# access still has no way to pull tooling in.
+RUN rm -rf /usr/local/bin/pip* /usr/local/lib/python3.12/ensurepip \
+ && rm -rf /sbin/apk /etc/apk /lib/apk /usr/share/apk /var/cache/apk
+
+# Non-root. Matches uid 1000 used elsewhere in the stack so mounted files keep
+# consistent ownership.
+RUN addgroup -g 1000 -S proxy && adduser -u 1000 -S proxy -G proxy
+USER proxy
+
+# The scripts themselves are bind-mounted read-only at /home/node/proxy by
+# docker-compose.yml, deliberately: policy that can be reviewed on the host
+# without rebuilding an image, exactly like plugins/build-guard.
+WORKDIR /home/proxy
+
+# No CMD. docker-compose.yml supplies the command, because this one image backs
+# two different services (egress-proxy.py and tcp-forward.py) and a default
+# would just be a footgun if the compose command were ever dropped.
