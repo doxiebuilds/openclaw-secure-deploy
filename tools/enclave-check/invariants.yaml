@@ -1,0 +1,251 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# enclave-check invariants.
+#
+# Each entry names a CHECK TYPE implemented in check.py and supplies its
+# parameters. Adding an invariant of an existing type is a pure edit to this
+# file; a genuinely new question needs a new type (see README, "Adding an
+# invariant"). Nothing here is specific to check.py's internals — paths,
+# service names and expected lists all live in this file so the tool can be
+# pointed at a different deployment.
+#
+# Paths are relative to --repo-root (default: two levels above check.py).
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: 1
+
+sources:
+  # Listed in `-f` order. The merge honours !reset / !override, so adding
+  # docker-compose.cell3-bridge.yml here (or with --file) models the revert.
+  compose:
+    - openclaw-docker-config/docker-compose.yml
+  env_file: openclaw-docker-config/.env
+  build_guard: openclaw-enclave/plugins/build-guard/index.mjs
+  # How an agent cell is RECOGNISED: any service whose mounts place
+  # <agent_config_file> at <agent_config_target>. Nothing is hardcoded by name.
+  agent_config_target: /home/node/.openclaw
+  agent_config_file: openclaw.json
+
+vocabulary:
+  # Env vars that point a non-gateway process at an inference endpoint. Used
+  # alongside models.providers.*.baseUrl so a cell that is not an OpenClaw
+  # a non-gateway process that still runs a model counts as holding a model.
+  model_env_keys:
+    - OPENAI_API_BASE
+    - OPENAI_BASE_URL
+    - ANTHROPIC_BASE_URL
+    - OLLAMA_HOST
+  # A credential is a `secrets:` entry or an env var shaped like one. A value
+  # that is still `${VAR}` at check time counts — the launcher supplies it at
+  # runtime; only a literal placeholder does not.
+  credential_env_patterns:
+    - "*_API_KEY"
+    - "*_TOKEN"
+    - "*_SECRET"
+    - "*_PASSWORD"
+    - "*_CREDENTIALS"
+  credential_placeholder_values:
+    - dummy
+    - none
+    - unset
+    - changeme
+    - ""
+  # Host directories carrying content that originated outside the trust
+  # boundary. briefs/ is included deliberately: the sealer validates a brief's
+  # SCHEMA, not its semantics, so a promoted brief is still model-written prose
+  # derived from hostile input. Remove it here if you disagree — that is the
+  # kind of judgement that belongs in this file and not in the code.
+  untrusted_mounts:
+    - /exchange/raw
+    - /exchange/normalized
+    - /exchange/briefs-pending
+    - /exchange/inbox
+    - /exchange/briefs
+  localhost_forms:
+    - localhost
+    - 127.0.0.1
+    - "::1"
+    - "[::1]"
+
+invariants:
+
+  # 1 ─────────────────────────────────────────────────────────────────────────
+  - id: no-model-holds-all-three
+    type: no_holder_of_set_with_model
+    statement: "NO CONTAINER HOLDS raw + normalized + briefs AND A MODEL."
+    why: >
+      Stated verbatim in docker-compose.yml (lines 48 and 502). Holding all
+      three handoff directories is only dangerous if something inside the
+      container can be TOLD what to do with them. The sealer holds all three
+      and is legal precisely because it has no model and no network.
+    mount_markers:
+      - /exchange/raw
+      - /exchange/normalized
+      - /exchange/briefs
+
+  # 2 ─────────────────────────────────────────────────────────────────────────
+  - id: no-agent-edits-own-schedule
+    type: agent_tool_denied
+    statement: "No agent in any cell may edit its own schedule (`cron` denied)."
+    why: >
+      An agent that can write its own cron entry can decide when it next runs
+      and with what prompt, which converts a one-shot injection into a
+      persistent one. `cron` is in the "coding" profile, so it must be denied
+      explicitly rather than merely left out.
+    tool: cron
+    field: deny
+    # A tool absent from an absolute tools.allow is already unreachable, but the
+    # invariant as written requires the explicit deny. Flip to true to accept
+    # allow-list omission as sufficient.
+    accept_absent_from_allow: false
+
+  # 3 ─────────────────────────────────────────────────────────────────────────
+  - id: no-lethal-trifecta-path
+    type: no_trifecta
+    statement: >
+      No single service holds untrusted content AND a credential AND a network
+      leg to a non-internal network.
+    why: >
+      Prompt injection travels along what a session HOLDS. Any two legs are
+      survivable; all three in one container is an exfiltration path that no
+      tool policy can close.
+    legs:
+      untrusted: vocabulary.untrusted_mounts
+      credential: true
+      # "Egress" here is the literal one: a leg on a network that is not
+      # `internal: true`. Proxied egress (cell 1 via scout-egress-proxy) is
+      # reported as evidence but does not by itself trip the invariant, because
+      # the proxy is a default-deny allowlist. Set to true to treat any
+      # allowlisted egress as a leg — scout would then FAIL, which is a
+      # defensible but different invariant.
+      count_proxied_egress_as_leg: false
+
+  # 4 ─────────────────────────────────────────────────────────────────────────
+  - id: internal-networks-have-no-egress
+    type: dual_homed_allowlist
+    statement: >
+      Every agent cell sits only on `internal: true` networks, and only
+      explicitly expected services bridge such a network to a non-internal one.
+    why: >
+      Every dual-homed container is a potential route off an internal network.
+      The ones on this list are safe for a reason that must be re-argued if the
+      list changes: the two egress proxies are default-deny allowlists, the
+      three ui-forwards and qwen-forward dial exactly one hard-coded
+      destination and never relay between their legs, and perplexity-mcp holds
+      a credential no cell holds (and is a courier, not a leash — see the
+      compose comment on that service).
+      The first clause exists because the second one alone is unfalsifiable:
+      deleting `internal: true` from a network REMOVES its members from the
+      dual-homed set, so a check that only counted bridges would report the
+      weakening as an improvement.
+    # Cells are found by their mounts, not by name, so this clause travels.
+    cells_must_be_internal_only: true
+    cells_allowed_direct_egress: []
+    expected:
+      - scout-egress-proxy
+      - main-egress-proxy
+      - main-ui-forward
+      - scout-ui-forward
+      - curator-ui-forward
+      - perplexity-mcp
+      - qwen-forward
+
+  # 5 ─────────────────────────────────────────────────────────────────────────
+  - id: curator-cannot-see-past-its-own-gate
+    type: two_layer_path_deny
+    statement: >
+      Cell 2 can neither read nor write either promotion destination, at the
+      Docker layer AND at the guard layer.
+    why: >
+      A producer that can read the far side of its own gate can tell whether a
+      rejected brief was quarantined and retry until one slips, which turns a
+      deterministic gate into an oracle.
+
+      briefs-flagged/ is the same hazard one step worse, and it is why this
+      invariant covers a set rather than a single path. It is not merely the far
+      side of the gate; it is the gate's ANSWER to a question cell 2 supplied the
+      input for. A curator that could see which of the two directories its brief
+      landed in would learn, per brief, whether its own
+      contains_external_instructions call was believed — and could then tune the
+      flag until briefs land wherever it prefers. That is a feedback channel from
+      the gate back to the producer, which is the one thing a deterministic gate
+      must not have.
+
+      Both layers are load-bearing: the mount is the primary control, the guard
+      rule is defence in depth. The report attributes failures per layer, because
+      "the mount is wrong" and "defence in depth is gone but the mount held" are
+      different incidents.
+    docker:
+      service: openclaw-curator
+      forbidden_paths:
+        - /exchange/briefs
+        - /exchange/briefs-flagged
+    guard:
+      agent: curator
+      fields: [readDeny, writeDeny]
+      # `${EXCHANGE}/...` in plugins/build-guard/index.mjs, resolved.
+      must_contain_all:
+        - /home/node/exchange/briefs
+        - /home/node/exchange/briefs-flagged
+
+  # 5b ────────────────────────────────────────────────────────────────────────
+  - id: only-the-sealer-writes-the-destinations
+    type: sole_writer
+    statement: >
+      Only quarantine-sealer holds a writable mount of briefs/ or briefs-flagged/.
+    why: >
+      These are the far side of the schema check. If any other service can write
+      them, the gate is not on the path at all — a brief could simply appear in
+      a directory cell 3 reads, without ever having been validated, resolved or
+      routed. That is precisely the window that existed until 2026-08-01, when
+      the curator wrote straight into briefs/ and cell 3 polled it live.
+
+      Note this is deliberately about the WRITE handle, not the mount's presence.
+      Cell 3 mounts both :ro and that is correct and required; it is the one
+      consumer. A checker that flagged any mount at all would be unusable, and
+      one that ignored the mode would miss the only thing that matters.
+    sole_writer: quarantine-sealer
+    paths:
+      - /exchange/briefs
+      - /exchange/briefs-flagged
+
+  # 6 ─────────────────────────────────────────────────────────────────────────
+  - id: no-proxy-names-only-qwen-forward
+    type: no_proxy_scope
+    statement: >
+      Every proxied cell's NO_PROXY names the local inference forwarder and
+      nothing that could become an unproxied path to the internet.
+    why: >
+      NO_PROXY is a hole in the egress allowlist. A wildcard, a public domain
+      or a CIDR there silently restores direct internet access for any client
+      that honours it, and the failure is invisible — traffic simply stops
+      appearing in the proxy's DENY log.
+    required:
+      - qwen-forward
+    # Peers that are dual-homed AND not single-destination forwarders need an
+    # explicit entry here. perplexity-mcp is accepted with eyes open: it reaches
+    # api.perplexity.ai on the cell's behalf, which the compose file documents
+    # as a courier rather than a leash.
+    accepted_dual_homed_peers:
+      - perplexity-mcp
+
+  # 7 ─────────────────────────────────────────────────────────────────────────
+  - id: baseline-matches-config
+    type: baseline_restatement
+    statement: >
+      exec-allowlist.baseline still restates cell 3's openclaw.json accurately.
+    why: >
+      The baseline is a flattened, denormalized copy of another file. That is
+      drift-prone by construction: the JSON can change and the pin still reads
+      all-clear if nobody re-derives it. This re-derives it from the JSON
+      instead of trusting it.
+    baseline: openclaw-enclave/templates/exec-allowlist.baseline
+    # The config is taken from this service's mounts, so it cannot drift from
+    # what the container actually runs.
+    service: openclaw
+    guard_sha256_file: openclaw-enclave/plugins/build-guard/index.mjs
+    # Baseline lines this invariant does NOT derive from openclaw.json (the
+    # exec allowlist patterns come from the live gateway state, not the config).
+    # They are listed in the output as unchecked rather than assumed correct.
+    ignore_prefixes:
+      - "defaults "
+      - "agent:"

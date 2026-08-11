@@ -1,0 +1,106 @@
+#!/bin/sh
+# Enable once per clone (hooks are not cloned):
+#   git config core.hooksPath .githooks
+#
+# Two independent jobs:
+#   1. Refuse commands that set OPENCLAW_STATE_DIR (tools/lint-dangerous-recipes.sh).
+#   2. Refuse credentials in the staged diff (below).
+#
+# Public-repo note: live openclaw.json is gitignored. Committed cell configs are
+# openclaw.example.json files (and README.md). A literal token pasted into an
+# example — instead of a {"source","provider","id"} SecretRef — is still a
+# public disclosure. This hook checks every staged openclaw*.json under
+# openclaw-enclave/.
+#
+# No `set -e`: every check runs and every failure is reported, rather than
+# stopping at the first one.
+
+fail=0
+
+# ── 1. Pre-existing check: dangerous recipes ─────────────────────────────────
+if ! sh "$(git rev-parse --show-toplevel)/tools/lint-dangerous-recipes.sh"; then
+  fail=1
+fi
+
+# ── 2a. gitleaks. Broadest coverage; optional dependency. ───────────────────
+if command -v gitleaks >/dev/null 2>&1; then
+  # The subcommand was renamed across 8.x: `protect --staged` (<= 8.18) became
+  # `git --staged` (>= 8.19). Try the modern spelling, fall back to the old one.
+  if ! gitleaks git --staged --redact --no-banner >/dev/null 2>&1; then
+    if ! gitleaks protect --staged --redact --no-banner; then
+      echo "pre-commit: gitleaks found secrets in the staged diff." >&2
+      fail=1
+    fi
+  fi
+else
+  echo "pre-commit: gitleaks not installed (brew install gitleaks) — pattern checks only." >&2
+fi
+
+# ── 2b. Zero-dependency check for the credential shapes this repo handles ────
+# A scanner that silently stops running is worse than no scanner, so this layer
+# has no dependencies at all.
+# Every prefix requires real key material after it, never a bare literal. This
+# is not cosmetic: with a bare `lin_api_` in the pattern, the hook matched its
+# OWN source line in the staged diff and could never be committed. Requiring
+# trailing key characters fixes that and cuts false positives on prose at the
+# same time.
+PATTERNS='xoxb-[0-9]|xapp-[0-9]|xoxp-[0-9]|lin_api_[A-Za-z0-9]{10}|pplx-[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|github_pat_[A-Za-z0-9_]{10}'
+if git diff --cached --no-color -U0 | grep -E '^\+' | grep -qE "$PATTERNS"; then
+  echo "pre-commit: staged diff contains a credential-shaped string:" >&2
+  git diff --cached --no-color -U0 | grep -E '^\+' | grep -E "$PATTERNS" \
+    | cut -c1-56 | sed 's/$/…/; s/^/    /' >&2
+  fail=1
+fi
+
+# ── 2c. openclaw*.json under openclaw-enclave must use SecretRefs, not literals
+# Covers openclaw.example.json (tracked) and any accidental openclaw.json stage.
+for CFG in $(git diff --cached --name-only | grep -E '^openclaw-enclave/.+/openclaw[^/]*\.json$' || true); do
+  git show ":$CFG" | CFG_PATH="$CFG" python3 -c '
+import json, sys, re, os
+
+path = os.environ.get("CFG_PATH", "openclaw.json")
+try:
+    cfg = json.load(sys.stdin)
+except Exception as e:
+    print(f"{path} is not valid JSON: {e}", file=sys.stderr)
+    sys.exit(1)
+
+# Same rule as PATTERNS above: no bare prefixes, or this file cannot commit itself.
+SHAPES = re.compile(r"xoxb-\d|xapp-\d|xoxp-\d|lin_api_[A-Za-z0-9]{10}|pplx-[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}")
+CRED_KEYS = ("token", "apikey", "secret", "password", "authtoken")
+# models.providers.qwen-local.apiKey is the literal "dummy" — a local endpoint
+# that authenticates nothing. Allowed explicitly so this does not cry wolf.
+ALLOWED_LITERALS = {"dummy", ""}
+
+bad = []
+
+def walk(o, p=""):
+    if isinstance(o, dict):
+        # A SecretRef is exactly {"source","provider","id"}: the correct shape,
+        # and it never carries a credential. Do not descend into it.
+        if set(o) == {"source", "provider", "id"}:
+            return
+        for k, v in o.items():
+            walk(v, p + "/" + k)
+    elif isinstance(o, list):
+        for i, v in enumerate(o):
+            walk(v, p + "/" + str(i))
+    elif isinstance(o, str):
+        if SHAPES.search(o):
+            bad.append(p + " (credential-shaped literal)")
+        elif p.split("/")[-1].lower().endswith(CRED_KEYS) and o not in ALLOWED_LITERALS:
+            bad.append(p + " (literal at a credential-named key — use a SecretRef)")
+
+walk(cfg)
+if bad:
+    print(f"{path} must use SecretRefs, not literals. Offending paths:", file=sys.stderr)
+    for b in bad:
+        print("    " + b, file=sys.stderr)
+    sys.exit(1)
+' || fail=1
+done
+
+if [ "$fail" -ne 0 ]; then
+  echo "pre-commit: commit blocked. Use --no-verify only if you are certain." >&2
+  exit 1
+fi

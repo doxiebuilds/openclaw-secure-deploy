@@ -1,0 +1,10 @@
+defaults security=allowlist ask=on-miss
+agent:main security=allowlist ask=on-miss
+plugins.load.paths=/home/node/plugins/build-guard
+plugins.allow=active-memory,build-guard,memory-wiki,slack
+agent-tools:main profile=None allow=apply_patch,create_goal,edit,exec,get_goal,linear__list_issues,linear__list_projects,linear__list_teams,memory_get,memory_search,process,read,session_status,sessions_history,sessions_list,sessions_send,sessions_spawn,sessions_yield,skill_workshop,subagents,update_goal,update_plan,write deny=code_execution,cron,web_fetch,web_search,x_search workspaceOnly=None
+agent-model:main None
+tools.profile=coding
+tools.web.search.enabled=False
+mcp.servers=linear
+guard sha256=af649c390d0c619d80c0610940b80261f8902f2007f08afd3f39bb2cf862f787

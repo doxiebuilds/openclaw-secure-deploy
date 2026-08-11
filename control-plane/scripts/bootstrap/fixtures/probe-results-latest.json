@@ -1,0 +1,987 @@
+{
+  "phase": 0,
+  "generatedAt": "2026-08-08T15:25:03Z",
+  "openclawVersionExpected": "2026.7.1",
+  "protocolVersion": 4,
+  "gateways": {
+    "main": {
+      "container": "openclaw",
+      "containerPresent": true,
+      "running": true,
+      "cliVersion": "OpenClaw 2026.7.1",
+      "expectedAgents": [
+        "main",
+        "builder",
+        "critic"
+      ],
+      "methods": {
+        "health": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "ok",
+              "ts",
+              "durationMs",
+              "eventLoop",
+              "plugins",
+              "configReload",
+              "modelPricing",
+              "channels",
+              "channelOrder",
+              "channelLabels",
+              "heartbeatSeconds",
+              "defaultAgentId",
+              "agents",
+              "sessions"
+            ],
+            "ok": true,
+            "defaultAgentId": "main",
+            "agentIds": [
+              null,
+              null,
+              null
+            ],
+            "agentCount": 3
+          },
+          "targetPhase": "1"
+        },
+        "status": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "runtimeVersion",
+              "heartbeat",
+              "channelSummary",
+              "queuedSystemEvents",
+              "tasks",
+              "taskAudit",
+              "sessions",
+              "eventLoop"
+            ],
+            "runtimeVersion": "2026.7.1",
+            "tasksKeys": [
+              "total",
+              "active",
+              "terminal",
+              "failures",
+              "byStatus",
+              "byRuntime"
+            ]
+          },
+          "targetPhase": "1-2"
+        },
+        "agents.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "defaultId",
+              "mainKey",
+              "scope",
+              "agents"
+            ],
+            "defaultId": "main",
+            "agentIds": [
+              "main",
+              "builder",
+              "critic"
+            ],
+            "agentCount": 3
+          },
+          "targetPhase": "2"
+        },
+        "sessions.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "ts",
+              "path",
+              "count",
+              "totalCount",
+              "limitApplied",
+              "nextOffset",
+              "hasMore",
+              "defaults",
+              "sessions"
+            ],
+            "count": 72,
+            "totalCount": 72,
+            "sessionCount": 72
+          },
+          "targetPhase": "2-3"
+        },
+        "config.get": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "path",
+              "exists",
+              "raw",
+              "parsed",
+              "sourceConfig",
+              "resolved",
+              "valid",
+              "runtimeConfig",
+              "config",
+              "hash",
+              "issues",
+              "warnings",
+              "legacyIssues"
+            ],
+            "hash": "REDACTED",
+            "valid": true,
+            "exists": true
+          },
+          "targetPhase": "7"
+        },
+        "cron.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "jobs",
+              "total",
+              "offset",
+              "limit",
+              "hasMore",
+              "nextOffset",
+              "deliveryPreviews"
+            ],
+            "jobKeys": [
+              "main:product-hunt-slack-digest"
+            ],
+            "jobCount": 1
+          },
+          "targetPhase": "6"
+        },
+        "cron.status": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "enabled",
+              "storePath",
+              "storage",
+              "sqlitePath",
+              "jobs",
+              "nextWakeAtMs"
+            ],
+            "enabled": true
+          },
+          "targetPhase": "6"
+        },
+        "exec.approval.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "list",
+            "length": 0
+          },
+          "targetPhase": "4"
+        },
+        "exec.approvals.get": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "path",
+              "exists",
+              "hash",
+              "file"
+            ],
+            "hash": "REDACTED",
+            "exists": true
+          },
+          "targetPhase": "4"
+        },
+        "system-presence": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "list",
+            "length": 4
+          },
+          "targetPhase": "1"
+        },
+        "tasks.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "tasks"
+            ],
+            "taskCount": 8
+          },
+          "targetPhase": "2-3"
+        },
+        "config.schema": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "schema",
+              "uiHints",
+              "version",
+              "generatedAt"
+            ]
+          },
+          "targetPhase": "7"
+        },
+        "config.schema.lookup": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "path",
+              "schema",
+              "reloadKind",
+              "hint",
+              "hintPath",
+              "children"
+            ]
+          },
+          "targetPhase": "7"
+        },
+        "chat.history": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "sessionKey",
+              "sessionId",
+              "messages",
+              "defaults",
+              "sessionInfo",
+              "thinkingLevel"
+            ]
+          },
+          "targetPhase": "3"
+        },
+        "cron.runs": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "entries",
+              "total",
+              "offset",
+              "limit",
+              "hasMore",
+              "nextOffset"
+            ]
+          },
+          "targetPhase": "6"
+        },
+        "config.patch": {
+          "exitCode": null,
+          "ok": null,
+          "skipped": true,
+          "reason": "Mutating RPC not exercised in Phase 0 (RO bind mount; host-mediated apply planned).",
+          "targetPhase": "7",
+          "advertised": true
+        },
+        "config.apply": {
+          "exitCode": null,
+          "ok": null,
+          "skipped": true,
+          "reason": "Mutating RPC not exercised in Phase 0 (RO bind mount; host-mediated apply planned).",
+          "targetPhase": "7",
+          "advertised": true
+        }
+      },
+      "openclawJsonMountMode": "ro",
+      "openclawJsonReadOnly": true
+    },
+    "scout": {
+      "container": "openclaw-scout",
+      "containerPresent": true,
+      "running": true,
+      "cliVersion": "OpenClaw 2026.7.1",
+      "expectedAgents": [
+        "scout"
+      ],
+      "methods": {
+        "health": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "ok",
+              "ts",
+              "durationMs",
+              "eventLoop",
+              "plugins",
+              "configReload",
+              "modelPricing",
+              "channels",
+              "channelOrder",
+              "channelLabels",
+              "heartbeatSeconds",
+              "defaultAgentId",
+              "agents",
+              "sessions"
+            ],
+            "ok": true,
+            "defaultAgentId": "scout",
+            "agentIds": [
+              null
+            ],
+            "agentCount": 1
+          },
+          "targetPhase": "1"
+        },
+        "status": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "runtimeVersion",
+              "heartbeat",
+              "channelSummary",
+              "queuedSystemEvents",
+              "tasks",
+              "taskAudit",
+              "sessions",
+              "eventLoop"
+            ],
+            "runtimeVersion": "2026.7.1",
+            "tasksKeys": [
+              "total",
+              "active",
+              "terminal",
+              "failures",
+              "byStatus",
+              "byRuntime"
+            ]
+          },
+          "targetPhase": "1-2"
+        },
+        "agents.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "defaultId",
+              "mainKey",
+              "scope",
+              "agents"
+            ],
+            "defaultId": "scout",
+            "agentIds": [
+              "scout"
+            ],
+            "agentCount": 1
+          },
+          "targetPhase": "2"
+        },
+        "sessions.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "ts",
+              "path",
+              "count",
+              "totalCount",
+              "limitApplied",
+              "nextOffset",
+              "hasMore",
+              "defaults",
+              "sessions"
+            ],
+            "count": 26,
+            "totalCount": 26,
+            "sessionCount": 26
+          },
+          "targetPhase": "2-3"
+        },
+        "config.get": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "path",
+              "exists",
+              "raw",
+              "parsed",
+              "sourceConfig",
+              "resolved",
+              "valid",
+              "runtimeConfig",
+              "config",
+              "hash",
+              "issues",
+              "warnings",
+              "legacyIssues"
+            ],
+            "hash": "REDACTED",
+            "valid": true,
+            "exists": true
+          },
+          "targetPhase": "7"
+        },
+        "cron.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "jobs",
+              "total",
+              "offset",
+              "limit",
+              "hasMore",
+              "nextOffset",
+              "deliveryPreviews"
+            ],
+            "jobKeys": [
+              "scout:inbox-research-requests",
+              "scout:product-hunt-daily-digest"
+            ],
+            "jobCount": 2
+          },
+          "targetPhase": "6"
+        },
+        "cron.status": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "enabled",
+              "storePath",
+              "storage",
+              "sqlitePath",
+              "jobs",
+              "nextWakeAtMs"
+            ],
+            "enabled": true
+          },
+          "targetPhase": "6"
+        },
+        "exec.approval.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "list",
+            "length": 0
+          },
+          "targetPhase": "4"
+        },
+        "exec.approvals.get": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "path",
+              "exists",
+              "hash",
+              "file"
+            ],
+            "hash": "REDACTED",
+            "exists": true
+          },
+          "targetPhase": "4"
+        },
+        "system-presence": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "list",
+            "length": 1
+          },
+          "targetPhase": "1"
+        },
+        "tasks.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "tasks",
+              "nextCursor"
+            ],
+            "taskCount": 100
+          },
+          "targetPhase": "2-3"
+        },
+        "config.schema": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "schema",
+              "uiHints",
+              "version",
+              "generatedAt"
+            ]
+          },
+          "targetPhase": "7"
+        },
+        "config.schema.lookup": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "path",
+              "schema",
+              "reloadKind",
+              "hint",
+              "hintPath",
+              "children"
+            ]
+          },
+          "targetPhase": "7"
+        },
+        "chat.history": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "sessionKey",
+              "sessionId",
+              "messages",
+              "defaults",
+              "sessionInfo",
+              "thinkingLevel"
+            ]
+          },
+          "targetPhase": "3"
+        },
+        "cron.runs": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "entries",
+              "total",
+              "offset",
+              "limit",
+              "hasMore",
+              "nextOffset"
+            ]
+          },
+          "targetPhase": "6"
+        },
+        "config.patch": {
+          "exitCode": null,
+          "ok": null,
+          "skipped": true,
+          "reason": "Mutating RPC not exercised in Phase 0 (RO bind mount; host-mediated apply planned).",
+          "targetPhase": "7",
+          "advertised": true
+        },
+        "config.apply": {
+          "exitCode": null,
+          "ok": null,
+          "skipped": true,
+          "reason": "Mutating RPC not exercised in Phase 0 (RO bind mount; host-mediated apply planned).",
+          "targetPhase": "7",
+          "advertised": true
+        }
+      },
+      "openclawJsonMountMode": "ro",
+      "openclawJsonReadOnly": true
+    },
+    "curator": {
+      "container": "openclaw-curator",
+      "containerPresent": true,
+      "running": true,
+      "cliVersion": "OpenClaw 2026.7.1",
+      "expectedAgents": [
+        "curator"
+      ],
+      "methods": {
+        "health": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "ok",
+              "ts",
+              "durationMs",
+              "eventLoop",
+              "plugins",
+              "configReload",
+              "modelPricing",
+              "channels",
+              "channelOrder",
+              "channelLabels",
+              "heartbeatSeconds",
+              "defaultAgentId",
+              "agents",
+              "sessions"
+            ],
+            "ok": true,
+            "defaultAgentId": "curator",
+            "agentIds": [
+              null
+            ],
+            "agentCount": 1
+          },
+          "targetPhase": "1"
+        },
+        "status": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "runtimeVersion",
+              "heartbeat",
+              "channelSummary",
+              "queuedSystemEvents",
+              "tasks",
+              "taskAudit",
+              "sessions",
+              "eventLoop"
+            ],
+            "runtimeVersion": "2026.7.1",
+            "tasksKeys": [
+              "total",
+              "active",
+              "terminal",
+              "failures",
+              "byStatus",
+              "byRuntime"
+            ]
+          },
+          "targetPhase": "1-2"
+        },
+        "agents.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "defaultId",
+              "mainKey",
+              "scope",
+              "agents"
+            ],
+            "defaultId": "curator",
+            "agentIds": [
+              "curator"
+            ],
+            "agentCount": 1
+          },
+          "targetPhase": "2"
+        },
+        "sessions.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "ts",
+              "path",
+              "count",
+              "totalCount",
+              "limitApplied",
+              "nextOffset",
+              "hasMore",
+              "defaults",
+              "sessions"
+            ],
+            "count": 4,
+            "totalCount": 4,
+            "sessionCount": 4
+          },
+          "targetPhase": "2-3"
+        },
+        "config.get": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "path",
+              "exists",
+              "raw",
+              "parsed",
+              "sourceConfig",
+              "resolved",
+              "valid",
+              "runtimeConfig",
+              "config",
+              "hash",
+              "issues",
+              "warnings",
+              "legacyIssues"
+            ],
+            "hash": "REDACTED",
+            "valid": true,
+            "exists": true
+          },
+          "targetPhase": "7"
+        },
+        "cron.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "jobs",
+              "total",
+              "offset",
+              "limit",
+              "hasMore",
+              "nextOffset",
+              "deliveryPreviews"
+            ],
+            "jobKeys": [
+              "curator:distill-normalized"
+            ],
+            "jobCount": 1
+          },
+          "targetPhase": "6"
+        },
+        "cron.status": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "enabled",
+              "storePath",
+              "storage",
+              "sqlitePath",
+              "jobs",
+              "nextWakeAtMs"
+            ],
+            "enabled": true
+          },
+          "targetPhase": "6"
+        },
+        "exec.approval.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "list",
+            "length": 0
+          },
+          "targetPhase": "4"
+        },
+        "exec.approvals.get": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "path",
+              "exists",
+              "hash",
+              "file"
+            ],
+            "hash": "REDACTED",
+            "exists": true
+          },
+          "targetPhase": "4"
+        },
+        "system-presence": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "list",
+            "length": 1
+          },
+          "targetPhase": "1"
+        },
+        "tasks.list": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "tasks",
+              "nextCursor"
+            ],
+            "taskCount": 100
+          },
+          "targetPhase": "2-3"
+        },
+        "config.schema": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "schema",
+              "uiHints",
+              "version",
+              "generatedAt"
+            ]
+          },
+          "targetPhase": "7"
+        },
+        "config.schema.lookup": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "path",
+              "schema",
+              "reloadKind",
+              "hint",
+              "hintPath",
+              "children"
+            ]
+          },
+          "targetPhase": "7"
+        },
+        "chat.history": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "sessionKey",
+              "sessionId",
+              "messages",
+              "defaults",
+              "sessionInfo",
+              "thinkingLevel"
+            ]
+          },
+          "targetPhase": "3"
+        },
+        "cron.runs": {
+          "exitCode": 0,
+          "ok": true,
+          "summary": {
+            "parse_ok": true,
+            "type": "dict",
+            "keys": [
+              "entries",
+              "total",
+              "offset",
+              "limit",
+              "hasMore",
+              "nextOffset"
+            ]
+          },
+          "targetPhase": "6"
+        },
+        "config.patch": {
+          "exitCode": null,
+          "ok": null,
+          "skipped": true,
+          "reason": "Mutating RPC not exercised in Phase 0 (RO bind mount; host-mediated apply planned).",
+          "targetPhase": "7",
+          "advertised": true
+        },
+        "config.apply": {
+          "exitCode": null,
+          "ok": null,
+          "skipped": true,
+          "reason": "Mutating RPC not exercised in Phase 0 (RO bind mount; host-mediated apply planned).",
+          "targetPhase": "7",
+          "advertised": true
+        }
+      },
+      "openclawJsonMountMode": "ro",
+      "openclawJsonReadOnly": true
+    }
+  },
+  "hostHealthz": {
+    "main": {
+      "httpStatus": "200",
+      "ok": true
+    },
+    "scout": {
+      "httpStatus": "200",
+      "ok": true
+    },
+    "curator": {
+      "httpStatus": "200",
+      "ok": true
+    }
+  },
+  "summary": {
+    "hostHealthzAllOk": true,
+    "containersAllRunning": true,
+    "methodOk": 45,
+    "methodFail": 0,
+    "methodSkipped": 6,
+    "overallOk": true,
+    "criticalFindings": [
+      "Host raw WebSocket connect with gateway token alone does NOT grant operator scopes; device pairing/device identity is required for host CP clients (see PHASE0_PROTOCOL.md).",
+      "Automations CLI is openclaw cron (not openclaw automations) on 2026.7.1.",
+      "openclaw.json is bind-mounted read-only into containers; config apply must be host-mediated.",
+      "Do not run control-plane connectors inside agent cells (no cross-cell host.docker.internal path assumed)."
+    ]
+  }
+}

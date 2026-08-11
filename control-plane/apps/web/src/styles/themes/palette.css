@@ -1,0 +1,100 @@
+/* OpenClaw Control Plane — color palette.
+   Warm, airy chat aesthetic (inspired by chat.mistral.ai / Vibe):
+   paper whites, soft warm grays, near-black dark mode, orange accent.
+   Components never hard-code brand colors; they read these tokens. */
+
+:root,
+[data-theme='light'] {
+  /* Surfaces — warm paper, not cool blue-slate */
+  --ocp-canvas: #f6f6f4;
+  --ocp-raised: #ffffff;
+  --ocp-panel: #efefec;
+  --ocp-recess: #e4e4e0;
+  --ocp-well: #d0d0cb;
+  --ocp-ash: #a8a8a2;
+  --ocp-steel: #6e6e69;
+  --ocp-slate: #3d3d3a;
+  --ocp-charcoal: #1a1a18;
+  --ocp-void: #0c0c0b;
+
+  --ocp-hover: #ecece8;
+  --ocp-press: #e0e0db;
+
+  /* Ink */
+  --ocp-ink: #1a1a18;
+  --ocp-ink-2: #5c5c57;
+  --ocp-ink-3: #8a8a84;
+  --ocp-ink-disabled: #b5b5af;
+  --ocp-ink-on: #ffffff;
+
+  /* Accent — Mistral-adjacent orange flame */
+  --ocp-accent: #ff8205;
+  --ocp-ok: #1f8a4c;
+  --ocp-warn: #d97706;
+  --ocp-bad: #dc2626;
+  --ocp-info: #2563eb;
+
+  /* Edges — barely-there warm hairlines */
+  --ocp-edge: #e4e4df;
+  --ocp-edge-soft: #efefeb;
+
+  /* Chat / chips */
+  --ocp-bubble-user: #fff1e3;
+  --ocp-bubble-hint: #f3f3ef;
+  --ocp-chip: #efefec;
+
+  /* Soft tints */
+  --ocp-accent-soft: color-mix(in srgb, var(--ocp-accent) 12%, transparent);
+  --ocp-accent-edge: color-mix(in srgb, var(--ocp-accent) 30%, transparent);
+  --ocp-ok-soft: color-mix(in srgb, var(--ocp-ok) 12%, transparent);
+  --ocp-ok-edge: color-mix(in srgb, var(--ocp-ok) 32%, transparent);
+  --ocp-warn-soft: color-mix(in srgb, var(--ocp-warn) 12%, transparent);
+  --ocp-warn-edge: color-mix(in srgb, var(--ocp-warn) 32%, transparent);
+  --ocp-bad-soft: color-mix(in srgb, var(--ocp-bad) 10%, transparent);
+  --ocp-bad-edge: color-mix(in srgb, var(--ocp-bad) 32%, transparent);
+}
+
+[data-theme='dark'] {
+  /* Near-black warm dark (not blue slate) */
+  --ocp-canvas: #0c0c0b;
+  --ocp-raised: #161614;
+  --ocp-panel: #1c1c1a;
+  --ocp-recess: #282825;
+  --ocp-well: #343430;
+  --ocp-ash: #4a4a45;
+  --ocp-steel: #7a7a74;
+  --ocp-slate: #a8a8a2;
+  --ocp-charcoal: #d4d4cf;
+  --ocp-void: #f6f6f4;
+
+  --ocp-hover: #222220;
+  --ocp-press: #2e2e2b;
+
+  --ocp-ink: #f5f5f2;
+  --ocp-ink-2: #b0b0a9;
+  --ocp-ink-3: #7a7a74;
+  --ocp-ink-disabled: #4a4a45;
+  --ocp-ink-on: #1a1a18;
+
+  --ocp-accent: #ff8f1f;
+  --ocp-ok: #4ade80;
+  --ocp-warn: #fbbf24;
+  --ocp-bad: #f87171;
+  --ocp-info: #60a5fa;
+
+  --ocp-edge: #2a2a27;
+  --ocp-edge-soft: #1f1f1c;
+
+  --ocp-bubble-user: #3a2412;
+  --ocp-bubble-hint: #1f1f1c;
+  --ocp-chip: #222220;
+
+  --ocp-accent-soft: color-mix(in srgb, var(--ocp-accent) 16%, transparent);
+  --ocp-accent-edge: color-mix(in srgb, var(--ocp-accent) 34%, transparent);
+  --ocp-ok-soft: color-mix(in srgb, var(--ocp-ok) 14%, transparent);
+  --ocp-ok-edge: color-mix(in srgb, var(--ocp-ok) 32%, transparent);
+  --ocp-warn-soft: color-mix(in srgb, var(--ocp-warn) 14%, transparent);
+  --ocp-warn-edge: color-mix(in srgb, var(--ocp-warn) 32%, transparent);
+  --ocp-bad-soft: color-mix(in srgb, var(--ocp-bad) 12%, transparent);
+  --ocp-bad-edge: color-mix(in srgb, var(--ocp-bad) 32%, transparent);
+}

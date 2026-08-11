@@ -1,0 +1,64 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# REVERT OVERRIDE: put cell 3 back on the NAT'd bridge.
+#
+# THIS WEAKENS THE STACK ON PURPOSE. It undoes the control described in
+# ARCHITECTURE.MD §2: cell 3 regains a default route, public DNS
+# and unrestricted internet. Use it to get working again, then find out what
+# broke and go back to the default.
+#
+# WHEN YOU ACTUALLY NEED IT
+# The egress allowlist is exact-match and pins Slack and Linear hostnames. An
+# image upgrade that moves Slack to a new host, or a new integration, fails
+# closed — net_main is `internal: true`, so the symptom is "Slack never
+# connects", not a leak. This file gets you running in one command while you
+# read the DENY lines:
+#
+#     docker logs main-egress-proxy | grep DENY
+#
+# The right fix is almost always to add the denied host to EGRESS_ALLOW in
+# docker-compose.yml, not to keep running this.
+#
+# USAGE
+#     ./launch-openclaw.sh --no-cell3-proxy
+# which is equivalent to:
+#     docker compose -f docker-compose.yml -f docker-compose.cell3-bridge.yml up -d
+#
+# Verify it actually reverted — `docker compose config --format json` is the
+# authority, because compose MERGES some keys and replaces others, and getting
+# that backwards produced a cell 3 on [default, net_main] that kept its default
+# route while every check still passed:
+#
+#     docker inspect openclaw --format '{{json .NetworkSettings.Networks}}'
+# do not use that file normally.
+# Your running configuration is correct:
+# openclaw is attached only to net_main (internal network).
+# main-egress-proxy is running.
+# openclaw is healthy.
+# Use the bridge override only temporarily if Slack/Linear stops connecting after an update.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+
+  openclaw:
+    # `!reset` clears the proxy variables entirely. They MUST go: main-egress-proxy
+    # lives on net_main, so leaving them set while cell 3 sits on `default` points
+    # every request at an unreachable proxy and nothing works at all.
+    environment: !reset []
+    # `!override` is load-bearing. Compose MERGES the networks key by default, so
+    # without the tag this resolves to [net_main, default] — cell 3 would keep an
+    # internal leg it no longer needs and the revert would be half-applied.
+    networks: !override
+      - default
+    # Restored together: a routable network needs resolvers to be useful.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    # ⛔ Deliberately NOT restoring `ports:` here. main-ui-forward still publishes
+    #    127.0.0.1:18789 and joins `default` below, so the Control UI URL is
+    #    unchanged. Publishing from both would be a host port collision.
+
+  # Follows cell 3 onto the bridge so it can still reach openclaw:18789. Compose
+  # MERGES this list, so net_main and net_helpers are retained; that is fine and
+  # costs nothing, since the forwarder still dials exactly one destination.
+  main-ui-forward:
+    networks:
+      - default

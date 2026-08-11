@@ -3,15 +3,44 @@
     "providers": {
       "default": {
         "source": "env"
+      },
+      "docker-secrets": {
+        "source": "file",
+        "path": "/run/secrets/openclaw_secrets",
+        "mode": "json",
+        "timeoutMs": 5000,
+        "maxBytes": 65536
+      }
+    }
+  },
+  "skills": {
+    "workshop": {
+      "autonomous": {
+        "enabled": true
+      }
+    },
+    "entries": {
+      "weather": {
+        "enabled": false
+      },
+      "academic-deep-research": {
+        "enabled": false
       }
     }
   },
   "agents": {
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
+      "model": "qwen-local/qwen/qwen3.6-35b-a3b",
       "memorySearch": {
         "enabled": true,
-        "provider": "none"
+        "provider": "none",
+        "sources": [
+          "memory"
+        ],
+        "extraPaths": [
+          "/home/node/.openclaw/workspace/memory"
+        ]
       },
       "compaction": {
         "reserveTokensFloor": 35000
@@ -21,28 +50,67 @@
         "ttl": "5m"
       },
       "sandbox": {
-        "mode": "off",
-        "backend": "docker",
-        "workspaceAccess": "rw",
-        "workspaceRoot": "/path/to/your/openclaw/openclaw-enclave/workspace",
-        "docker": {
-          "image": "openclaw-sandbox-jstest:latest",
-          "network": "none",
-          "capDrop": [
-            "ALL"
+        "mode": "off"
+      },
+      "subagents": {
+        "maxSpawnDepth": 2,
+        "maxChildrenPerAgent": 5,
+        "maxConcurrent": 4,
+        "runTimeoutSeconds": 900,
+        "delegationMode": "suggest"
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "description": "Trusted work. Repo read/write, wrapper exec, reads briefs. NO web tools.",
+        "workspace": "/home/node/.openclaw/workspace",
+        "tools": {
+          "allow": [
+            "read",
+            "write",
+            "edit",
+            "apply_patch",
+            "exec",
+            "process",
+            "memory_search",
+            "memory_get",
+            "sessions_list",
+            "sessions_history",
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_yield",
+            "subagents",
+            "session_status",
+            "get_goal",
+            "create_goal",
+            "update_goal",
+            "update_plan",
+            "skill_workshop",
+            "linear__list_teams",
+            "linear__list_issues",
+            "linear__list_projects"
+          ],
+          "deny": [
+            "web_fetch",
+            "web_search",
+            "x_search",
+            "code_execution",
+            "cron"
           ]
         }
       }
-    }
+    ]
   },
   "gateway": {
     "mode": "local",
     "auth": {
       "mode": "token",
       "token": {
-        "source": "env",
-        "provider": "default",
-        "id": "OPENCLAW_GATEWAY_AUTH_TOKEN"
+        "source": "file",
+        "provider": "docker-secrets",
+        "id": "/gateway/authToken"
       },
       "rateLimit": {
         "maxAttempts": 10,
@@ -82,6 +150,10 @@
   },
   "tools": {
     "profile": "coding",
+    "exec": {
+      "mode": "auto",
+      "strictInlineEval": true
+    },
     "loopDetection": {
       "enabled": true,
       "historySize": 30,
@@ -100,27 +172,15 @@
     },
     "web": {
       "search": {
-        "enabled": true,
-        "provider": "duckduckgo"
+        "enabled": false
       }
     }
-  },
-  "wizard": {
-    "securityAcknowledgedAt": "2026-07-14T00:48:07.730Z",
-    "lastRunAt": "2026-07-14T02:46:29.587Z",
-    "lastRunVersion": "2026.7.1",
-    "lastRunCommand": "onboard",
-    "lastRunMode": "local"
-  },
-  "meta": {
-    "lastTouchedVersion": "2026.7.1",
-    "lastTouchedAt": "2026-07-14T03:00:52.423Z"
   },
   "models": {
     "mode": "merge",
     "providers": {
       "qwen-local": {
-        "baseUrl": "http://host.docker.internal:1234/v1",
+        "baseUrl": "http://qwen-forward:1234/v1",
         "apiKey": "dummy",
         "api": "openai-completions",
         "timeoutSeconds": 180,
@@ -145,30 +205,37 @@
       "mode": "socket",
       "groupPolicy": "allowlist",
       "channels": {
-        "YOUR_CHANNEL_ID_1": {
+        "C_EXAMPLE_MAIN": {
           "enabled": true,
           "requireMention": false,
           "users": [
-            "YOUR_USER_ID"
+            "U_EXAMPLE_OWNER"
           ]
         },
-        "YOUR_CHANNEL_ID_2": {
+        "C_EXAMPLE_ALERTS": {
           "enabled": true,
           "requireMention": false,
           "users": [
-            "YOUR_USER_ID"
+            "U_EXAMPLE_OWNER"
+          ]
+        },
+        "C_EXAMPLE_DEV": {
+          "enabled": true,
+          "requireMention": false,
+          "users": [
+            "U_EXAMPLE_OWNER"
           ]
         }
       },
       "botToken": {
-        "source": "env",
-        "provider": "default",
-        "id": "SLACK_BOT_TOKEN"
+        "source": "file",
+        "provider": "docker-secrets",
+        "id": "/slack/botToken"
       },
       "appToken": {
-        "source": "env",
-        "provider": "default",
-        "id": "SLACK_APP_TOKEN"
+        "source": "file",
+        "provider": "docker-secrets",
+        "id": "/slack/appToken"
       },
       "streaming": {
         "mode": "progress",
@@ -178,11 +245,35 @@
       }
     }
   },
+  "mcp": {
+    "servers": {
+      "linear": {
+        "url": "https://mcp.linear.app/mcp/readonly",
+        "transport": "streamable-http",
+        "auth": "oauth",
+        "oauth": {
+          "scope": "read"
+        },
+        "requestTimeoutMs": 20000,
+        "connectionTimeoutMs": 5000,
+        "toolFilter": {
+          "exclude": [
+            "*create_*",
+            "*update_*",
+            "*delete_*",
+            "*archive_*",
+            "*remove_*"
+          ]
+        }
+      }
+    }
+  },
   "plugins": {
     "allow": [
       "slack",
       "active-memory",
-      "memory-wiki"
+      "memory-wiki",
+      "build-guard"
     ],
     "bundledDiscovery": "compat",
     "entries": {
@@ -219,7 +310,32 @@
           "persistTranscripts": false,
           "logging": true
         }
+      },
+      "memory-wiki": {
+        "enabled": true,
+        "config": {
+          "vaultMode": "isolated",
+          "vault": {
+            "path": "/home/node/.openclaw/wiki/main",
+            "renderMode": "native"
+          },
+          "bridge": {
+            "enabled": false
+          },
+          "unsafeLocal": {
+            "allowPrivateMemoryCoreAccess": false
+          },
+          "ingest": {
+            "autoCompile": true,
+            "allowUrlIngest": false
+          }
+        }
       }
+    },
+    "load": {
+      "paths": [
+        "/home/node/plugins/build-guard"
+      ]
     }
   }
 }

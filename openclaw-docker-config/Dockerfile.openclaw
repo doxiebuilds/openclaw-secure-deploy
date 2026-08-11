@@ -1,5 +1,26 @@
-FROM ghcr.io/openclaw/openclaw:latest
-USER root
-RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
-    && rm -rf /var/lib/apt/lists/*
-USER node
+# Pinned by digest, NOT :latest.
+#
+# Upstream's `latest` tag is stale — it currently resolves to 2026.6.34 while
+# 2026.7.1 is released. Because this config was last written by 2026.7.1, a
+# `latest` build produces an older binary that refuses to start:
+#   "Refusing to run automatic gateway startup migrations because this OpenClaw
+#    binary (2026.6.34) is older than the config last written by 2026.7.1."
+# Pinning by digest also means a rebuild can never silently change the running
+# binary — upgrades become an explicit, reviewable edit to this line.
+#
+# To upgrade: docker pull ghcr.io/openclaw/openclaw:<version>
+#             docker inspect ghcr.io/openclaw/openclaw:<version> \
+#               --format '{{index .RepoDigests 0}}'
+# then replace the digest below and rebuild.
+FROM ghcr.io/openclaw/openclaw@sha256:6a31d44b2944e7adcd2b582bf6fb463111264ebca97a0201795b799135bd102c
+
+# NOTE: the docker.io CLI is deliberately NOT installed.
+#
+# It was previously needed to drive nested sandbox containers through a socket
+# proxy. That design was removed — this container is itself the sandbox and has
+# no route to any Docker daemon (no docker.sock, no DOCKER_HOST). A docker
+# client with no daemon provides no function, and omitting it means a
+# compromised agent has no Docker tooling to reach for if a socket is ever
+# mounted here by mistake.
+#
+# Runs as the upstream non-root `node` user (uid 1000).

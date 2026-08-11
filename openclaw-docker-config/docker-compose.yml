@@ -1,51 +1,162 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Isolation model: THESE CONTAINERS ARE THE SANDBOX.
+#
+# OpenClaw's own docs describe its sandbox feature as running agent tools in
+# containers "while the gateway itself stays on the host". We invert that: the
+# gateway is confined instead, which is a strictly stronger boundary.
+#
+# We deliberately do NOT run nested per-session sandboxes, because the only way
+# to provide them is to hand a container the ability to create containers.
+# Any such path (raw docker.sock OR a socket proxy with POST=1) permits
+# `POST /containers/create` carrying arbitrary HostConfig.Binds — i.e. mounting
+# the host filesystem into a fresh container. That is a full host-escape
+# primitive granted to the very component we are sandboxing against.
+# `VOLUMES=0` does NOT prevent this: it gates the /volumes API (named volumes),
+# not bind mounts. `openclaw doctor` agrees: "Do not add broad Docker container
+# privileges just to satisfy nested [sandboxing]; that weakens the outer sandbox."
+#
+# ─── FOUR CELLS (2026-07-31) ─────────────────────────────────────────────────
+# Until now there was one agent identity, and it held all three legs of the
+# prompt-injection trifecta at once: untrusted content in, private data, and
+# egress. Splitting on "who is watching" (the :cron: rule in build-guard) does
+# nothing about that, because injection travels along "what is the session
+# holding".
+#
+#   cell 1  openclaw-scout     hostile content + egress, nothing worth stealing
+#   cell 2  openclaw-curator   hostile content, NO route off-box at all
+#   cell 3  openclaw           the repo, the credentials, NO web tools
+#   gate    quarantine-sealer  the airlock — no model, no network, no credential
+#
+# The boundary between cells is a FILE plus a deterministic gate, never a live
+# context handoff — see openclaw-enclave/exchange/ and scripts/quarantine-seal.sh.
+#
+# THE MOUNT LIST IS THE SECURITY BOUNDARY. Read it before the rules: cell 3
+# never mounts exchange/raw or exchange/normalized, so `main` cannot read
+# hostile text even if every check in build-guard fails. The guard's per-agent
+# rules are defence in depth over this layout, not the primary control.
+#
+# THE INVARIANT IS RESTATED, NOT WEAKENED (2026-08-01). The first reader to
+# scroll to quarantine-sealer will notice it mounts raw/ AND normalized/ AND
+# briefs/ at once, which no cell may, and reach for the revert. Don't: the
+# property that ever mattered was never "no container holds all three" — that
+# was a proxy for it. A container holding all three is only dangerous if
+# something inside it can be TOLD what to do with them. The sealer has no
+# model, no network and no credential; it runs one fixed script on a timer.
+# The checkable invariant is therefore:
+#
+#     NO CONTAINER HOLDS raw + normalized + briefs AND A MODEL.
+#
+# That mount split is not a hole in the airlock, it IS the airlock — the
+# handoff has to be performed by something, and the something must be
+# deterministic rather than a fifth agent.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 services:
-  docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:latest
-    container_name: docker-socket-proxy
-    restart: unless-stopped
-    privileged: true
-    environment:
-      - CONTAINERS=1      # read container info
-      - IMAGES=1          # check the sandbox image exists
-      - POST=1            # REQUIRED to create/start containers
-      - ALLOW_START=1
-      - ALLOW_STOP=1
-      - EXEC=0            # explicitly block exec-into-container
-      - VOLUMES=0
-      - NETWORKS=0
-      - SYSTEM=0
-      - INFO=0
-      - SWARM=0
-      - SECRETS=0
-      - CONFIGS=0
-      - AUTH=0
-      - BUILD=0
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - openclaw-internal
+
+  # ═══ CELL 3 — main, builder, critic ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  # Holds the project repos, the Slack tokens and the Linear OAuth. There is NO
+  # frontier-model credential here, or anywhere — verified 2026-07-31: the
+  # secrets file carries only /gateway/authToken and the two Slack tokens, and
+  # `openclaw models list` reports exactly one model, the local Qwen, tagged
+  # default. Earlier revisions of this comment claimed otherwise; every cell
+  # runs on qwen-forward, so hostile content never reaches a paid provider from
+  # ANY cell and no cell can burn credit.
+  #
+  # Has NO web tools: openclaw.json grants an
+  # absolute tools.allow that omits web_fetch/web_search/x_search, and also
+  # code_execution and cron — both are in the "coding" profile and both would
+  # otherwise be capabilities nobody intended to grant).
   openclaw:
     build:
         context: .
         dockerfile: Dockerfile.openclaw
-        pull: true
-    image: openclaw-with-cli:latest
+        # pull: true removed — the base image is pinned by digest in the
+        # Dockerfile, so re-pulling can never change what we run.
+    image: openclaw-hardened:latest   # renamed: no docker CLI in the image anymore
     container_name: openclaw
     restart: unless-stopped
+    # ─── Secrets: a file, NOT environment variables ───
+    #
+    # ⛔ No DOCKER_HOST. This container has no path to any Docker daemon.
+    #
+    # ⛔ NO SECRET may appear in `environment:`. The gateway auth token and both
+    #    Slack tokens used to be passed there, which leaked them three ways:
+    #    `docker inspect openclaw`, /proc/1/environ, and — the one that actually
+    #    mattered — inheritance by every process the agent spawns.
+    #
+    #    They now arrive as a 0600 JSON file at /run/secrets/openclaw_secrets
+    #    (see the top-level `secrets:` block at the end of this file) and are
+    #    read only by the gateway, at SecretRef-resolution time.
+    #
+    #    The `environment:` block below carries proxy addresses only. Those are
+    #    not secrets, and every one of the three leak paths is harmless for a
+    #    hostname a process must know to function.
+    #
+    # ⛔ PERPLEXITY_API_KEY is NOT here and must never be added. Perplexity now
+    #    lives on the scout network only — this container cannot even reach it.
+    #
+    # ⛔ OPENCLAW_STATE_DIR must never appear here in ANY form, including the
+    #    YAML mapping form `OPENCLAW_STATE_DIR: /path`. Setting it makes
+    #    OpenClaw MOVE the live exec-approvals.json and rename the original to
+    #    `.migrated`; that destroyed the file on 2026-07-29. There is no flag
+    #    that disables migrations. tools/lint-dangerous-recipes.sh blocks both
+    #    the `=` and the `:` forms at commit time.
+    secrets:
+      - openclaw_secrets
+    depends_on:
+      - main-egress-proxy
+      - qwen-forward
     environment:
-      - DOCKER_HOST=tcp://docker-socket-proxy:2375
-      - OPENCLAW_GATEWAY_AUTH_TOKEN=${OPENCLAW_GATEWAY_AUTH_TOKEN}
-      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
-      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
+      # main-egress-proxy is the ONLY way out. net_main is `internal: true`, so
+      # a client that ignores these variables has no route and fails closed —
+      # it cannot quietly bypass the allowlist. That is the property that made
+      # this safe to turn on: you find out by breakage, never by a leak.
+      - HTTP_PROXY=http://main-egress-proxy:3128
+      - HTTPS_PROXY=http://main-egress-proxy:3128
+      - http_proxy=http://main-egress-proxy:3128
+      - https_proxy=http://main-egress-proxy:3128
+      # qwen-forward is a peer on the internal network, not egress. Routing it
+      # through the proxy would fail: it is not on the allowlist and must not be.
+      - NO_PROXY=qwen-forward,localhost,127.0.0.1
+      - no_proxy=qwen-forward,localhost,127.0.0.1
+      # See the note on scout: without this, node's fetch ignores the proxy
+      # variables entirely. Cell 3's Slack and Linear clients happen to honour
+      # them already, so nothing here is currently broken — this is set so that
+      # anything reaching for plain fetch() later fails allowlisted rather than
+      # mysteriously, instead of leaving a trap for the next person.
+      - NODE_USE_ENV_PROXY=1
     # ─── Network ───
-    ports:
-      - "127.0.0.1:18789:18789"
-    dns:
-      - 1.1.1.1                              # Cloudflare DNS (needed for web search)
-      - 8.8.8.8                              # Google DNS (fallback)
+    # `internal: true`, so there is NO default route and NO DNS to the outside.
+    # Cell 3 is not on net_helpers or net_scout either, so it cannot reach
+    # perplexity-mcp, the scout proxy, or the other cells. qwen-forward joins
+    # net_main, so inference works without leaving the network.
+    #
+    # THE HONEST LIMIT IS CLOSED AS OF 2026-08-01. This container used to sit on
+    # a NAT'd bridge with public resolvers and reach the whole internet; `main`
+    # having "no egress" meant no egress TOOL, and anything below the tool layer
+    # (gateway RCE, a second plugin, a container escape) had a path out,
+    # including DNS. It now reaches Slack and Linear and nothing else, enforced
+    # by topology rather than by tool policy.
+    #
+    # What made this look hard for so long was the belief that a frontier model
+    # SDK had to honour the proxy. There is no frontier provider (see the header)
+    # — every cell runs on the local Qwen — so the only clients to prove were
+    # Slack socket mode and the Linear MCP endpoint. Both pass; the evidence is
+    # recorded in SECURITY.md ("Network").
+    #
+    # ⛔ No `ports:`. On an internal network Docker silently DROPS port
+    #    publishing — the request lands in HostConfig.PortBindings and
+    #    NetworkSettings.Ports stays empty, with no warning. The Control UI is
+    #    published by main-ui-forward instead, on the same 127.0.0.1:18789.
+    #
+    # ⛔ No `dns:`. Public resolvers only make sense with a route to reach them.
+    #    The proxy resolves on cell 3's behalf.
+    #
+    # To put cell 3 back on the NAT'd bridge — after an upgrade breaks Slack,
+    # say — use `./launch-openclaw.sh --no-cell3-proxy`.
     networks:
-      - openclaw-internal
-      - default 
+      - net_main
     # ─── Security hardening ───
     security_opt:
       - no-new-privileges:true
@@ -53,31 +164,79 @@ services:
       - ALL
     read_only: true                           # Container root filesystem is read-only
     tmpfs:
-      - /tmp:size=256M                        # Writable /tmp with size limit
+      - /tmp:size=256M
 
-    # ─── Volumes: everything OpenClaw can reach lives under openclaw-enclave/ ───
     volumes:
       # Config dir: read-write (OpenClaw writes to agents/, state/, logs/, etc.)
-      - ~/Documents/openclaw/openclaw-enclave/openclaw-secure-config:/home/node/.openclaw
+      - ../openclaw-enclave/openclaw-secure-config:/home/node/.openclaw
 
       # Config file: read-only overlay (OpenClaw cannot modify its own config)
-      - ~/Documents/openclaw/openclaw-enclave/openclaw-secure-config/openclaw.json:/home/node/.openclaw/openclaw.json:ro
-      
-      # Block OpenClaw from reading or modifying the template file
-      - /dev/null:/home/node/.openclaw/openclaw.example.json:ro
-      
-      # Workspace: read-write (THE ONE FOLDER OpenClaw can freely write to)
-      - ~/Documents/openclaw/openclaw-enclave/workspace:/home/node/.openclaw/workspace
+      - ../openclaw-enclave/openclaw-secure-config/openclaw.json:/home/node/.openclaw/openclaw.json:ro
+
+      # NOT MOUNTED: exec-approvals.json.
+      #
+      # Mounting it individually (ro OR rw) breaks exec entirely. The gateway
+      # rewrites that file on every allowlist hit to update `lastUsedAt`, and
+      # it does so atomically — temp file in the same directory, then rename
+      # over the target. A single-file bind mount cannot be replaced by
+      # rename, so every exec call dies with:
+      #   EBUSY: resource busy or locked, rename
+      # and the tool call fails rather than degrading. Verified 2026-07-27.
+      #
+      # It cannot be closed at the mount layer: the gateway and the agent run
+      # as the same uid, and the gateway must write this file, so no filesystem
+      # permission can permit one and refuse the other. CLOSED INSTEAD by
+      # plugins/build-guard/index.mjs, which refuses write/edit/apply_patch to
+      # anything under /home/node/.openclaw except workspace/ and
+      # skill-workshop/, and refuses READS of state/, identity/, mcp-oauth/,
+      # devices/ and exec-approvals.json itself.
+
+      # Workspace: read-write. Cell 3's own; the other cells have their own.
+      - ../openclaw-enclave/workspace:/home/node/.openclaw/workspace
+
+      # ─── The exchange: cross-cell handoff, one direction per mount ───
+      #
+      # Cell 3 sees ONLY these three. raw/ and normalized/ are deliberately
+      # absent: hostile fetched text is not mountable here, so `main` cannot
+      # read it by any means, guard or no guard.
+      #   briefs   :ro  — validated claims from curator. Read, never written.
+      #   reviews  rw   — critic writes, main reads.
+      #   requests rw   — main writes research requests. A host-side mover
+      #                   validates them and, after YOUR approval, copies them
+      #                   into scout's inbox. main can never write inbox/.
+      - ../openclaw-enclave/exchange/briefs:/home/node/exchange/briefs:ro
+      #   briefs-flagged :ro — briefs whose SOURCE tried to instruct the reader.
+      #                   Mounted so a human working in this cell can ask for one
+      #                   by name; NOT in briefs/INDEX.txt, so nothing routine
+      #                   ever puts one in front of the model. The separation is
+      #                   the control — a warning field inside the document would
+      #                   be a warning the model can be talked past, and the text
+      #                   doing the talking is the text the field is about.
+      - ../openclaw-enclave/exchange/briefs-flagged:/home/node/exchange/briefs-flagged:ro
+      - ../openclaw-enclave/exchange/reviews:/home/node/exchange/reviews
+      - ../openclaw-enclave/exchange/requests:/home/node/exchange/requests
 
       # Operational scripts: read-only (cron runs these; agent must not rewrite them)
-      - ~/Documents/openclaw/openclaw-enclave/scripts:/home/node/scripts:ro
+      - ../openclaw-enclave/scripts:/home/node/scripts:ro
 
-      # Folder to store projects and code
-      - ${HOST_PROJECTS_1_PATH}:${CONTAINER_PROJECTS_1_PATH}
+      # Guard plugin: read-only. Referenced by plugins.load.paths in
+      # openclaw.json, which is itself mounted :ro above — so the agent can
+      # edit neither the policy that constrains it nor the pointer naming it.
+      - ../openclaw-enclave/plugins:/home/node/plugins:ro
 
-      # ⛔ REMOVED: /var/run/docker.sock — critical security risk
+      # State-file templates and skills sources: read-only.
+      - ../openclaw-enclave/templates:/home/node/templates:ro
+      - ../openclaw-enclave/skills:/home/node/skills:ro
 
-    # ─── Resource limits ───
+      # Projects. NOTE: this mounts the coding-projects PARENT, not one project.
+      - ${HOST_PROJECTS_ROOT}:${CONTAINER_PROJECTS_ROOT}
+
+      # ⛔ NOT MOUNTED: /var/run/docker.sock, and no socket proxy either.
+      # ⛔ NOT MOUNTED: openclaw-enclave/backups/ — snapshots must stay out of
+      #    every container's reach. Recovering the state DB on 2026-07-31 left
+      #    a copy beside the live file; build-guard's read-deny now covers the
+      #    whole state/ directory, but backups belong outside entirely.
+
     deploy:
       resources:
         limits:
@@ -86,7 +245,724 @@ services:
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
-  
+
+  # ═══ CELL 1 — scout ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  # The only cell with a route to the public internet, because fetching public
+  # sources is its whole job. It therefore holds NOTHING worth exfiltrating:
+  # no Slack token, no Linear OAuth, no frontier-model key, and no mount of
+  # /home/node/projects. It runs on the local Qwen, so hostile content never
+  # reaches a paid provider and a compromised scout cannot burn credit.
+  #
+  # Its internet access is via scout-egress-proxy only (net_scout is
+  # `internal: true`, so there is no default route off it).
+  openclaw-scout:
+    image: openclaw-hardened:latest
+    container_name: openclaw-scout
+    restart: unless-stopped
+    depends_on:
+      - scout-egress-proxy
+      - qwen-forward
+    secrets:
+      # `target:` renames it inside the container. Each cell's config reads
+      # /run/secrets/openclaw_secrets, but the HOST files are separate so that
+      # scout's file physically contains only scout's token.
+      - source: scout_secrets
+        target: openclaw_secrets
+    environment:
+      # The proxy is the only way out; net_scout has no gateway of its own.
+      # VERIFY THIS RATHER THAN TRUST IT — undici (node's fetch) does not read
+      # these variables in every configuration, and a client that ignores them
+      # on a network with no route simply fails closed, which is acceptable,
+      # but a client that ignores them on a routable network is unprotected.
+      # SECURITY.md ("Verify it yourself") has the negative test.
+      - HTTP_PROXY=http://scout-egress-proxy:3128
+      - HTTPS_PROXY=http://scout-egress-proxy:3128
+      - http_proxy=http://scout-egress-proxy:3128
+      - https_proxy=http://scout-egress-proxy:3128
+      - NO_PROXY=perplexity-mcp,qwen-forward,localhost,127.0.0.1
+      - no_proxy=perplexity-mcp,qwen-forward,localhost,127.0.0.1
+      # REQUIRED, not optional. The variables above are ADVISORY: node's fetch
+      # (undici) ignores them unless this is set, and `web_fetch` is built on
+      # fetch. Without it every web_fetch tried to resolve DNS directly, and
+      # net_scout is `internal: true` with no resolver, so all of them died with
+      # EAI_AGAIN — which the agent reported as "DNS resolution failure" and a
+      # dead Product Hunt digest. `web_search` kept working the whole time
+      # because its client honours the proxy, which is what made this look like
+      # a site problem rather than a transport one.
+      #
+      # Node 24 added NODE_USE_ENV_PROXY; the image ships 24.16. Verified
+      # 2026-08-01: without it `fetch()` -> EAI_AGAIN, with it -> 200 through
+      # the allowlist. This does NOT widen reach — the proxy still refuses any
+      # host not in EGRESS_ALLOW.
+      - NODE_USE_ENV_PROXY=1
+    # ⛔ NO `ports:` HERE, AND IT WOULD NOT WORK IF THERE WERE. Docker silently
+    # ignores port publishing for a container attached only to an
+    # `internal: true` network: the request lands in HostConfig.PortBindings and
+    # NetworkSettings.Ports stays empty. This service DID carry
+    # "127.0.0.1:18829:18789" and it had never once taken effect — a config line
+    # that reads as access while providing none. Host access is via
+    # scout-ui-forward instead. Verified 2026-07-31.
+    networks:
+      - net_scout
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=128M
+    volumes:
+      - ../openclaw-enclave/openclaw-secure-config-scout:/home/node/.openclaw
+      - ../openclaw-enclave/openclaw-secure-config-scout/openclaw.json:/home/node/.openclaw/openclaw.json:ro
+      - ../openclaw-enclave/workspace-scout:/home/node/.openclaw/workspace
+      # Writes what it fetches; reads the requests you approved. Nothing else.
+      - ../openclaw-enclave/exchange/raw:/home/node/exchange/raw
+      - ../openclaw-enclave/exchange/inbox:/home/node/exchange/inbox:ro
+      - ../openclaw-enclave/plugins:/home/node/plugins:ro
+      # Condition scripts for cron --trigger-script, :ro. Its own directory
+      # rather than a corner of scripts/, matching proxy/, executor/ and
+      # sealer/: one directory per consumer, holding only what that consumer
+      # runs. scripts/ would additionally hand scout check-approvals.sh and
+      # research-request-mover.sh — the drift checker and the human-approval
+      # gate — which it has no use for.
+      #
+      # :ro IS THE POINT. This script decides WHEN scout wakes, so an agent that
+      # could edit it could rewrite its own alarm clock. Read-only here means the
+      # kernel refuses the write regardless of uid — verified 2026-08-02, a write
+      # fails even as --user 0 — and build-guard independently refuses it at the
+      # tool layer, since scout's write allowlist is exchange/raw alone. Two
+      # layers, either sufficient. The alternative was storing the script text in
+      # the gateway's cron store, which is tamper-proof too but invisible to git,
+      # undiffable, and lost on the rebuild that README.md (Quick start) already
+      # documents as requiring cron re-registration.
+      - ../openclaw-enclave/scout-triggers:/home/node/triggers:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+
+  # ═══ CELL 2 — curator ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  # The strictest cell. It reads hostile text, so it is assumed compromised —
+  # and there is nowhere for a compromised curator to go. net_curator is
+  # `internal: true`: no default route, no DNS to the outside, no internet.
+  # Its only reachable peer is qwen-forward, which connects to exactly one
+  # hard-coded destination.
+  #
+  # It has its OWN internal network rather than sharing one with cell 4. Both
+  # cells handle untrusted input, and a shared bridge let either reach the
+  # other's gateway by name — cell 4 could POST to curator's :18789, held off
+  # only by a token and a rate limit. That is a policy control standing in for
+  # a structural one. Two networks means the packet has nowhere to go.
+  #
+  # It holds no credential beyond its own gateway token, has no mcp.servers
+  # block at all, and does not mount exchange/raw — it only ever sees text the
+  # deterministic sealer has already normalized and capped.
+  #
+  # AND IT NO LONGER MOUNTS briefs/ AT ALL (2026-08-01). It writes to
+  # briefs-pending/ instead; the sealer validates and promotes. Previously
+  # curator wrote straight into briefs/, which cell 3 mounts :ro and reads
+  # live — so a brief that failed validation was readable by the cell holding
+  # the repo, Slack and Linear for the entire window between curator writing it
+  # and the sealer's next sweep. The window was the bug; removing the mount
+  # removes the window rather than shortening it.
+  openclaw-curator:
+    image: openclaw-hardened:latest
+    container_name: openclaw-curator
+    restart: unless-stopped
+    depends_on:
+      - qwen-forward
+    secrets:
+      - source: curator_secrets
+        target: openclaw_secrets
+    # ⛔ NO `ports:` — same reason as scout above. Host access is via
+    # curator-ui-forward.
+    networks:
+      - net_curator
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=128M
+    volumes:
+      - ../openclaw-enclave/openclaw-secure-config-curator:/home/node/.openclaw
+      - ../openclaw-enclave/openclaw-secure-config-curator/openclaw.json:/home/node/.openclaw/openclaw.json:ro
+      - ../openclaw-enclave/workspace-curator:/home/node/.openclaw/workspace
+      - ../openclaw-enclave/exchange/normalized:/home/node/exchange/normalized:ro
+      # Curator writes here; it can no longer write briefs/ at all. The sealer
+      # validates and promotes. Cell 3 is therefore structurally incapable of
+      # reading a brief no deterministic gate has passed — previously it could,
+      # for the whole window between curator writing and the sealer's next pass.
+      - ../openclaw-enclave/exchange/briefs-pending:/home/node/exchange/briefs-pending
+      - ../openclaw-enclave/plugins:/home/node/plugins:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+
+
+  # ═══ THE GATE — quarantine-sealer ══════════════════════════════════════════
+  # NOT A FIFTH CELL. A cell is an agent identity plus what its session holds;
+  # this has no session, no model and no credential. It is the deterministic
+  # gate BETWEEN cells — what the arrows in the pipeline diagram point at.
+  # ("Cell 5" is also already spoken for: the independent critic with
+  # /home/node/projects mounted :ro.)
+  #
+  # WHY IT EXISTS. quarantine-seal.sh ran from a macOS LaunchAgent every 600s
+  # and failed EVERY run with exit 126 "Operation not permitted" — TCC refuses
+  # LaunchAgent execution under TCC-protected paths (e.g. ~/Documents). The airlock was not
+  # late, it was OFF, and nothing said so.
+  #
+  # WHY IT MAY HOLD raw/ + normalized/ + briefs/ WHEN NO CELL MAY.
+  # That mount split IS the airlock. This is acceptable only for what it is NOT:
+  #   • no model — nothing to inject; it runs one fixed script, forever.
+  #   • no network at all — nothing to exfiltrate to, and no name by which any
+  #     other container can reach it.
+  #   • no credential — no secrets:, no .openclaw, no projects mount, and it
+  #     never touches inbox/, requests/ or reviews/.
+  # The invariant to keep checkable is therefore not "no container holds all
+  # three" but "NO CONTAINER HOLDS ALL THREE AND A MODEL".
+  quarantine-sealer:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    image: openclaw-proxy-minimal:latest
+    container_name: quarantine-sealer
+    restart: unless-stopped
+    command: ["sh", "/home/node/sealer/sealer-loop.sh"]
+
+    # ⛔ network_mode: none IS LOAD-BEARING AND IS NOT THE DEFAULT.
+    #    A service with no `networks:` key does NOT get "no network" — compose
+    #    silently attaches it to `default`, which is cell 3's NAT'd bridge with
+    #    full internet. `none` is stronger than another internal: true network:
+    #    no interface but lo, no DNS, and no name in any Docker network for a
+    #    peer to dial. Verify it; do not assume it.
+    network_mode: "none"
+
+    environment:
+      # Setting BOTH makes the script's $0/dirname derivation irrelevant. LIB
+      # always follows ENCLAVE_ROOT (there is no LIB_ROOT).
+      - ENCLAVE_ROOT=/enclave
+      - EXCHANGE_ROOT=/enclave/exchange
+      - POLL_SECONDS=300
+      # Partial-write guard. Default in the script is 0 (host-side behaviour
+      # unchanged); on here because a timer loop is where the race bites.
+      # MUST stay well below POLL_SECONDS.
+      - SEAL_MIN_AGE_SECONDS=30
+      # THE SWITCH FOR THE INBOX DISPATCH STAGE, and the reason the two mounts
+      # below are allowed to be required. Unset — every host-side manual run of
+      # quarantine-seal.sh, which is this container's documented rollback — skips
+      # the stage entirely and leaves all other behaviour byte-identical. Set,
+      # the script treats a missing inbox/ or inbox-state/ mount as FATAL rather
+      # than as a quiet no-op, which is the only way this pipeline has ever
+      # noticed a gate being off.
+      - INBOX_STATE_DIR=/enclave/inbox-state
+      # How long a dispatched request may go unanswered before the queue gives
+      # up on it and moves on. NOT a retry: the request is marked `abandoned` and
+      # never re-published, because a human-approved action that failed should be
+      # re-approved by a human. 6x POLL_SECONDS, so a slow scout run is never
+      # mistaken for a dead one.
+      - INBOX_DISPATCH_TIMEOUT_SECONDS=1800
+      # scripts/lib is mounted :ro and its host __pycache__ holds cpython-314
+      # bytecode this 3.12 interpreter ignores anyway.
+      - PYTHONDONTWRITEBYTECODE=1
+
+    healthcheck:
+      # LIVENESS THAT CAN ACTUALLY FAIL. `kill -0 1` only proves PID 1 exists,
+      # which restart: unless-stopped already covers. This container exists
+      # BECAUSE the airlock was silently off, so its probe must detect SILENCE.
+      # -mmin -15 is 3 poll cycles; it MUST stay greater than POLL_SECONDS.
+      # Honest limit: Docker does not restart an unhealthy container outside
+      # swarm. This makes failure visible in `docker ps`; it does not fix it.
+      test: ["CMD-SHELL", "find /tmp/sealer.beat -mmin -15 | grep -q . || exit 1"]
+      interval: 300s
+      timeout: 5s
+      start_period: 60s
+      retries: 2
+
+    # The loop traps TERM and exits between passes. The grace period covers a
+    # stop landing mid-pass; a SIGKILL there strands a .tmp (swept by the loop).
+    stop_grace_period: 30s
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+
+    volumes:
+      # Loop wrapper, ro — same convention as proxy/ and executor/.
+      - ../openclaw-enclave/sealer:/home/node/sealer:ro
+      # The script AND its lib in one mount, because LIB derives from
+      # ENCLAVE_ROOT. :ro — the gate cannot rewrite itself. Whole directory, not
+      # two single-file binds: a single-file bind survives no editor that saves
+      # by temp+rename, so the container would pin a stale inode of a security
+      # control. The other scripts here are inert — no model, no exec tool.
+      - ../openclaw-enclave/scripts:/enclave/scripts:ro
+      # The five exchange directories, and ONLY these five.
+      #   raw            rw — reads and UNLINKS after normalizing
+      #   normalized     rw — atomic_write temp + replace
+      #   briefs-pending rw — reads, promotes out, renames rejects
+      #   briefs         rw — PROMOTION TARGET; cell 3 reads this :ro
+      #   ledger         rw — the processing record and retry counter
+      #
+      # THE LEDGER IS THE SEALER'S ALONE. No cell mounts it, and none ever
+      # should. It records every file this gate processes, the outcome, and a
+      # per-file failure count that stops a poisoned input from being retried
+      # forever and reaps dead files after 24h. A producer that could edit its
+      # own failure count could reset it on every pass and retry past the cap
+      # indefinitely — which is precisely the loop the cap exists to stop. A
+      # counter the counted party can write is not a counter.
+      #
+      # IT GETS ITS OWN DIRECTORY because it is bookkeeping, not content.
+      # normalized/, briefs-pending/ and briefs/ are content directories that
+      # other cells mount and read; dropping the gate's internal state into one
+      # of them would hand another agent both a view of the retry accounting and
+      # a filename in a directory it already parses. Separate concerns get
+      # separate mounts, so "who can write the ledger" stays a one-line answer.
+      #
+      # ⛔ NOT MOUNTED: requests/, reviews/. And inbox/ IS MOUNTED, BUT :ro — the
+      #    rule that clause always stated is about WRITE. A container that could
+      #    write inbox/ would be an unattended route from cell 3's side to cell
+      #    1's, so research-request-mover.sh stays human-gated on the host and
+      #    this container still cannot manufacture an approved request. Read is
+      #    added because scout cannot list a directory (no glob/ls/find tool, and
+      #    `exec` denied to the cell that reads hostile text) and something has to
+      #    enumerate the queue. That is this process, which already computes the
+      #    curator's PENDING.txt and cell 3's INDEX.txt for the same reason.
+      - ../openclaw-enclave/exchange/inbox:/enclave/exchange/inbox:ro
+      # The dispatch manifest, rw, and DELIBERATELY THE LEAF DIRECTORY ONLY.
+      # workspace-scout/ itself must never be mounted here: it holds AGENTS.md,
+      # SOUL.md, IDENTITY.md and BOOTSTRAP.md, which are injected into every
+      # scout turn. A write handle on the workspace root would hand the container
+      # that also holds raw/ — the untrusted side of the airlock — an edit on
+      # cell 1's system prompt, which is a prompt-injection channel wearing a
+      # bookkeeping mount's clothes. The leaf holds one generated file.
+      - ../openclaw-enclave/workspace-scout/.inbox-state:/enclave/inbox-state
+      - ../openclaw-enclave/exchange/raw:/enclave/exchange/raw
+      - ../openclaw-enclave/exchange/normalized:/enclave/exchange/normalized
+      - ../openclaw-enclave/exchange/briefs-pending:/enclave/exchange/briefs-pending
+      - ../openclaw-enclave/exchange/briefs:/enclave/exchange/briefs
+      # rw, and it is the sealer alone that holds it that way. This is the second
+      # of the two destinations phase ② promotes into; the curator holds it in
+      # NEITHER direction, exactly as it holds neither direction on briefs/.
+      - ../openclaw-enclave/exchange/briefs-flagged:/enclave/exchange/briefs-flagged
+      - ../openclaw-enclave/exchange/ledger:/enclave/exchange/ledger
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+    # The only service with a logging block, because it is the only one that
+    # logs on a fixed interval forever. The heartbeat IS the evidence this
+    # container exists to produce — keep it, and bound it.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ═══ perplexity-mcp — the search credential, isolated from every agent ═════════════════════════════════════════════════════════════════════════════════════
+  # Holds PERPLEXITY_API_KEY. No cell's gateway does. Reachable ONLY from the
+  # scout network now: cell 3 is not on net_helpers, so `main` cannot reach it
+  # even by name.
+  #
+  # WHAT IT DOES NOT PROTECT AGAINST: prompt injection carried in search
+  # results. Those flow into scout's context by design — that is the entire
+  # purpose of a search tool. This boundary protects the credential, not the
+  # context. What limits the blast radius is that scout holds nothing.
+  #
+  # AND IT IS NOT BOUNDED BY EGRESS_ALLOW. Read this before concluding from
+  # scout-egress-proxy that cell 1 can reach twelve hosts. That allowlist bounds
+  # where scout's OWN connections terminate — it says nothing about where the
+  # CONTENT scout ends up holding came from. Perplexity's servers read arbitrary
+  # sites and hand back the text, so any page on the public internet can enter
+  # scout's context through this service without appearing on any list here.
+  # Two doors, not one: the proxy has a guest list, this one is a courier.
+  #
+  # It is also a small outbound channel in its own right — every call ships a
+  # query string (capped at 300 chars by the request schema in
+  # skills/dispatch-research) to api.perplexity.ai. Narrow, but the claim made
+  # of the proxy, "exfiltration to an attacker host fails here", is NOT true of
+  # this path and was never meant to be.
+  #
+  # This is accepted, not an oversight. A search tool that could only search
+  # twelve sites would not be a search tool. The containment that carries the
+  # weight is downstream, not here: scout holds no credential and no repo, and
+  # everything it learns leaves only via exchange/raw, through the sealer.
+  # Recorded because "cell 1 has default-deny egress" is a half-truth that this
+  # file, read top to bottom, would otherwise leave you believing.
+  perplexity-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.perplexity-mcp
+    image: perplexity-mcp-hardened:latest
+    container_name: perplexity-mcp
+    restart: unless-stopped
+    environment:
+      # Supplied by launch-openclaw.sh from the macOS Keychain; never written
+      # to disk. Visible in `docker inspect perplexity-mcp`, which is the
+      # accepted trade: no agent, no exec, no volumes, no children.
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
+    # ⛔ No `ports:`. ⛔ No `volumes:`. Nothing here to read or write.
+    networks:
+      - net_scout     # scout talks to it here
+      - net_helpers   # and it reaches api.perplexity.ai from here
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # ═══ scout-egress-proxy — default-deny allowlist for cell 1 ════════════════════════════════════════════════════════════════════════════════════════════════
+  # Dual-homed: accepts on net_scout (which has no route out) and connects from
+  # net_helpers (which does). Exfiltration to an attacker host fails here even
+  # if every check in build-guard fails.
+  #
+  # Adding a research domain is a deliberate, reviewable edit to this list.
+  #
+  # THIS LIST IS NOT AN INVENTORY OF WHAT SCOUT CAN REACH. It covers the two
+  # built-in tools — web_fetch, and web_search, whose provider is duckduckgo
+  # (hence the last two entries; see tools.web.search in the scout config).
+  # Scout's third web tool, perplexity__perplexity_search, does not come through
+  # here at all: perplexity-mcp is a peer on net_scout and is named in scout's
+  # NO_PROXY, so it is dialled directly. See the comment on that service for
+  # what that means for reach — it is the shorter leash of the two, but only one
+  # of them is a leash.
+  scout-egress-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    image: openclaw-proxy-minimal:latest
+    container_name: scout-egress-proxy
+    restart: unless-stopped
+    command: ["python3", "/home/node/proxy/egress-proxy.py"]
+    environment:
+      - EGRESS_PORT=3128
+      # Exact hostnames only — no suffix wildcards, no IP literals. These are
+      # the hosts scout's jobs actually fetch, and nothing else.
+      - EGRESS_ALLOW=www.producthunt.com,producthunt.com,hn.algolia.com,rss.arxiv.org,arxiv.org,api.github.com,efts.sec.gov,api.stackexchange.com,meta.discourse.org,forum.obsidian.md,html.duckduckgo.com,duckduckgo.com
+      - EGRESS_MAX_BYTES=8388608
+    networks:
+      - net_scout
+      - net_helpers
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+    volumes:
+      - ../openclaw-enclave/proxy:/home/node/proxy:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ═══ main-egress-proxy — default-deny allowlist for cell 3 ══════════════════════════════════════════════════════════════════════════════════════════════
+  # STAGED, NOT YET IN USE. This runs, but `openclaw` is still on the NAT'd
+  # `default` bridge and does not point at it. Attaching cell 3 is done by the
+  # override file docker-compose.cell3-proxy.yml, and only after the spike in
+  # SECURITY.md ("Network") shows Slack socket mode and the model SDK
+  # both honour HTTP(S)_PROXY. Shipping it half-working was refused before;
+  # this is the same refusal with the proxy pre-built so the test is one
+  # command instead of a rewrite.
+  #
+  # THE ALLOWLIST IS DERIVED, NOT GUESSED. Cell 3's config declares exactly
+  # three outbound needs: Slack (socket mode), the Linear MCP endpoint, and the
+  # local Qwen. Qwen is not here because it goes via qwen-forward, which is not
+  # egress. Anything else cell 3 reaches today is unaccounted for, which is the
+  # entire point of turning this on — the DENY lines are the finding.
+  main-egress-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    image: openclaw-proxy-minimal:latest
+    container_name: main-egress-proxy
+    restart: unless-stopped
+    command: ["python3", "/home/node/proxy/egress-proxy.py"]
+    environment:
+      - EGRESS_PORT=3128
+      # Exact hostnames only, matching scout's discipline. wss-primary and
+      # wss-backup are the socket-mode WebSocket endpoints; they arrive as
+      # CONNECT, which egress-proxy.py tunnels opaquely once the host matches.
+      - EGRESS_ALLOW=slack.com,api.slack.com,wss-primary.slack.com,wss-backup.slack.com,files.slack.com,mcp.linear.app,api.linear.app,linear.app
+      - EGRESS_MAX_BYTES=8388608
+    networks:
+      - net_main
+      - net_helpers
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+    volumes:
+      - ../openclaw-enclave/proxy:/home/node/proxy:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ═══ main-ui-forward — cell 3's Control UI ════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  # Cell 3 is on net_main (`internal: true`) and therefore cannot publish its
+  # own port, exactly like scout and curator. Without this, 127.0.0.1:18789 is
+  # dead while the gateway answers fine inside the container — a failure that
+  # looks like a crashed gateway and is not one.
+  #
+  # Safe for the same reason as the other forwarders: tcp-forward.py dials
+  # exactly openclaw:18789 and never relays between its legs, so cell 3
+  # connecting here reaches its own gateway and stops.
+  main-ui-forward:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    image: openclaw-proxy-minimal:latest
+    container_name: main-ui-forward
+    restart: unless-stopped
+    command: ["python3", "/home/node/proxy/tcp-forward.py"]
+    environment:
+      - FORWARD_TO_HOST=openclaw
+      - FORWARD_TO_PORT=18789
+      - FORWARD_LISTEN_PORT=18789
+    ports:
+      - "127.0.0.1:18789:18789"
+    networks:
+      - net_main
+      - net_helpers
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+    volumes:
+      - ../openclaw-enclave/proxy:/home/node/proxy:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  # ═══ ui-forwards — INBOUND ONLY, host → one gateway ════════════════════════════════════════════════════════════════════════════════════════════════════════
+  # Cells 1 and 2 sit on `internal: true` networks, and Docker will not publish
+  # a port for a container that has no non-internal leg. Without these you
+  # cannot reach either gateway from the host at all — no control UI, no
+  # `curl /healthz`, no browser session. Cell 3 has Slack; these two have no
+  # channel of any kind, so this is their only interactive path.
+  #
+  # WHY THIS DOES NOT REOPEN EGRESS. Same argument as qwen-forward: the
+  # destination never comes from the request. tcp-forward.py dials exactly
+  # FORWARD_TO_HOST:FORWARD_TO_PORT and nothing else, so a compromised scout
+  # that connects here reaches its own gateway and stops. It never relays
+  # between its legs, so net_helpers is not a route out for the cell.
+  #
+  # WHY net_helpers AND NOT `default` FOR THE PUBLISHABLE LEG. `default` is
+  # cell 3's bridge. Putting these there would let `main` dial
+  # scout-ui-forward and land on scout's gateway — the exact cell-3-to-cell-1
+  # boundary the whole design exists to maintain. No agent gateway is on
+  # net_helpers, which is why it is the correct outside leg.
+  #
+  # The gateway still requires its token; this forwards bytes, it does not
+  # authenticate. Published on loopback only, as cell 3 is.
+  scout-ui-forward:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    image: openclaw-proxy-minimal:latest
+    container_name: scout-ui-forward
+    restart: unless-stopped
+    command: ["python3", "/home/node/proxy/tcp-forward.py"]
+    environment:
+      - FORWARD_TO_HOST=openclaw-scout
+      - FORWARD_TO_PORT=18789
+      - FORWARD_LISTEN_PORT=18829
+    ports:
+      # Host port == listen port deliberately: one number to reason about, and
+      # it matches gateway.controlUi.allowedOrigins in the scout config.
+      - "127.0.0.1:18829:18829"
+    networks:
+      - net_scout
+      - net_helpers
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+    volumes:
+      - ../openclaw-enclave/proxy:/home/node/proxy:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  curator-ui-forward:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    image: openclaw-proxy-minimal:latest
+    container_name: curator-ui-forward
+    restart: unless-stopped
+    command: ["python3", "/home/node/proxy/tcp-forward.py"]
+    environment:
+      - FORWARD_TO_HOST=openclaw-curator
+      - FORWARD_TO_PORT=18789
+      - FORWARD_LISTEN_PORT=18869
+    ports:
+      - "127.0.0.1:18869:18869"
+    networks:
+      - net_curator
+      - net_helpers
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+    volumes:
+      - ../openclaw-enclave/proxy:/home/node/proxy:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  # ═══ qwen-forward — a capability, not a filter ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  # Cells 1–3 need the local inference endpoint and nothing else. Docker
+  # cannot express that with rules: a bridge network reaches the host gateway
+  # AND the internet through one default route, and `internal: true` reaches
+  # neither.
+  #
+  # This is the only dual-homed member of each internal network. It accepts on
+  # the internal side and connects to ONE hard-coded destination. There is no
+  # allowlist to maintain and no second destination reachable by any request,
+  # because the destination never comes from the request.
+  #
+  # Dual-homed on each internal cell network so inference does not require a
+  # shared agent bridge. A forwarder is not a bridge — it never relays between
+  # its own legs; the only destination is FORWARD_TO_HOST:PORT.
+  qwen-forward:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    image: openclaw-proxy-minimal:latest
+    container_name: qwen-forward
+    restart: unless-stopped
+    command: ["python3", "/home/node/proxy/tcp-forward.py"]
+    environment:
+      - FORWARD_TO_HOST=host.docker.internal
+      - FORWARD_TO_PORT=1234
+      - FORWARD_LISTEN_PORT=1234
+    networks:
+      - net_curator
+      - net_scout
+      - net_helpers
+      # net_main is how cell 3 reaches Qwen now that it is on an internal
+      # network. `default` stays in the list so that --no-cell3-proxy keeps
+      # working without a second edit: one model baseUrl
+      # (http://qwen-forward:1234/v1) is correct in BOTH topologies, which
+      # beats two that drift.
+      - net_main
+      - default
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+    volumes:
+      - ../openclaw-enclave/proxy:/home/node/proxy:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
 networks:
-  openclaw-internal:
-    internal: true   # proxy is unreachable from host or LAN, only from openclaw
+  # Cell 3's own bridge. Nothing else joins it, so `main` cannot reach the
+  # proxies, the forwarder, or perplexity-mcp.
+  default:
+
+  # Cell 1. `internal: true` means Docker adds NO default route and NO NAT, so
+  # the only way out is a dual-homed peer — scout-egress-proxy.
+  net_scout:
+    internal: true
+
+  # Cell 2. Same, and the only dual-homed peer here is qwen-forward, which can
+  # reach exactly one destination. This is the strongest network position in
+  # the stack.
+  net_curator:
+    internal: true
+
+
+  # Cell 3, once the spike passes. Defined and wired to main-egress-proxy now
+  # so that attaching `openclaw` is a one-line override rather than a rewrite;
+  # until then it has exactly one member and carries no traffic.
+  net_main:
+    internal: true
+
+  # The outside leg for the dual-homed helpers only. No agent gateway is on it.
+  net_helpers:
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Secrets.
+#
+# Swarm is INACTIVE on this host, so these are plain read-only bind mounts of
+# host files — NOT encrypted swarm secrets. Do not let the keyword suggest
+# otherwise.
+#
+# What they buy versus `environment:`: the values leave `docker inspect`, leave
+# /proc/1/environ, and stop being inherited by every process an agent spawns.
+#
+# ONE FILE PER CELL, deliberately. The scout and curator files contain only
+# their own gateway token — no Slack, no Linear, nothing. A cell cannot leak a
+# credential it was never given, and that is a stronger statement than a read
+# rule about a credential it holds.
+#
+# All three are written by launch-openclaw.sh from the macOS Keychain at mode
+# 0600. OpenClaw REQUIRES 0600-or-tighter and owner-matching
+# (assertSecurePermissions, @openclaw/fs-safe). They must exist before `up` and
+# must NOT be deleted afterwards: the file provider re-reads from disk on every
+# SecretRef resolution.
+secrets:
+  openclaw_secrets:
+    file: ${HOME}/.openclaw-secrets/openclaw-secrets.json
+  scout_secrets:
+    file: ${HOME}/.openclaw-secrets/scout-secrets.json
+  curator_secrets:
+    file: ${HOME}/.openclaw-secrets/curator-secrets.json

@@ -1,0 +1,105 @@
+# Perplexity MCP server — the agent's web search, deliberately in its OWN
+# container so the API key never enters the container the agent controls.
+#
+# ─── WHY A SEPARATE CONTAINER AT ALL ─────────────────────────────────────────
+# The alternative is @openclaw/perplexity-plugin, which is what Perplexity's own
+# docs describe. It puts the key in the gateway, at
+# plugins.entries.perplexity.config.webSearch.apiKey. That would be readable by
+# the agent: build-guard governs writes, and its read-deny only covers paths we
+# enumerate. A key held by a different container is not reachable at all — no
+# read tool, no exec, no prompt injection gets to it. That is the whole point.
+#
+# This is a SIBLING service, started by the host, NOT one of OpenClaw's nested
+# per-session sandboxes. That distinction matters: nested sandboxing requires
+# giving the gateway container the ability to create containers, which is a
+# host-escape primitive, and is rejected at length in docker-compose.yml. A
+# sibling needs no docker.sock and changes nothing about the isolation model.
+#
+# ─── WHAT THIS CONTAINER MAY REACH ───────────────────────────────────────────
+#   • api.perplexity.ai, outbound HTTPS. That is all it needs.
+#   • It has NO volumes — no workspace, no config, no state, nothing to read.
+#   • It publishes NO ports; only the gateway reaches it, over the compose
+#     network by service name.
+#
+# ─── SUPPLY CHAIN ───────────────────────────────────────────────────────────
+# Built from source because there is no prebuilt image: Perplexity publishes no
+# container, and Docker's catalog image `mcp/perplexity-ask` is stdio-only,
+# which would require the gateway to spawn it (i.e. docker.sock — refused).
+#
+# The repository has NO tags and NO releases, so a commit SHA is the only pin
+# available. Pinned below. Re-pin deliberately after reading the diff; never
+# float to a branch. This is the least-reviewed link in the chain and is
+# recorded as such in the plan's residual-risk list.
+#
+# Base images are pinned by digest, matching Dockerfile.openclaw's discipline,
+# so a rebuild cannot silently change the runtime. Upstream's own Dockerfile
+# uses the floating `node:22-alpine` and `npm install`; this uses digests and
+# `npm ci` so the build is reproducible.
+
+# ── builder ──────────────────────────────────────────────────────────────────
+# node:22.12-alpine
+FROM node@sha256:51eff88af6dff26f59316b6e356188ffa2c422bd3c3b76f2556a2e7e89d080bd AS builder
+
+# perplexityai/modelcontextprotocol @ 2026-07-27, "Merge pull request #126
+# from rbuchmayer-pplx/feat-api-key-provider". No tag exists; this is HEAD of
+# the default branch as of 2026-07-29.
+ARG PPLX_MCP_SHA=9f7dd0b1951c7421f930d1af8ff10e92473de0f9
+
+WORKDIR /build
+ADD https://codeload.github.com/perplexityai/modelcontextprotocol/tar.gz/${PPLX_MCP_SHA} /build/src.tgz
+# ADD does not auto-extract remote archives, so unpack explicitly. Verify the
+# SHA is what we asked for by requiring the directory codeload names after it.
+RUN tar -xzf src.tgz \
+    && test -d "modelcontextprotocol-${PPLX_MCP_SHA}" \
+    && mv "modelcontextprotocol-${PPLX_MCP_SHA}" /app \
+    && rm src.tgz
+
+WORKDIR /app
+# `npm ci` rather than upstream's `npm install`: it honours package-lock.json
+# exactly, so the dependency set is reproducible instead of resolved afresh.
+RUN npm ci --ignore-scripts
+RUN npm run build
+
+# ── release ──────────────────────────────────────────────────────────────────
+# node:22-alpine
+FROM node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS release
+
+WORKDIR /app
+COPY --from=builder /app/dist              /app/dist
+COPY --from=builder /app/package.json      /app/package.json
+COPY --from=builder /app/package-lock.json /app/package-lock.json
+
+ENV NODE_ENV=production
+RUN npm ci --ignore-scripts --omit=dev
+
+# ─── NETWORK DEFAULTS THIS OVERRIDES, AND WHY ────────────────────────────────
+# Both of these are set here rather than in compose so the image is correct by
+# construction and a hand-run `docker run` behaves the same way.
+#
+# BIND_ADDRESS: upstream defaults to 127.0.0.1 ("Defaults are loopback-only",
+# src/http.ts). Inside a container that means the gateway — a different network
+# namespace — cannot reach it at all. 0.0.0.0 here is NOT the "UNSAFE-public"
+# configuration upstream warns about: that warning is about exposing the port on
+# a host. This service publishes no ports, so 0.0.0.0 means "reachable on the
+# compose network", which is exactly and only the gateway.
+ENV BIND_ADDRESS=0.0.0.0
+#
+# ALLOWED_HOSTS: upstream's Host-header allowlist (anti-DNS-rebinding) is built
+# from loopback names only — localhost, 127.0.0.1, [::1], each with and without
+# the port. The gateway connects to http://perplexity-mcp:8080/mcp, so its Host
+# header is `perplexity-mcp:8080`, which is NOT in that set and would be
+# rejected. These two entries are appended to the loopback defaults, not a
+# replacement for them.
+ENV ALLOWED_HOSTS=perplexity-mcp:8080,perplexity-mcp
+#
+# ALLOWED_ORIGINS is deliberately LEFT UNSET. A missing Origin header is allowed
+# for non-browser callers, which is what OpenClaw's MCP client is; leaving it
+# empty keeps every cross-origin browser request rejected. Do not set it to "*".
+
+EXPOSE 8080
+
+# The node image ships an unprivileged `node` user (uid 1000). Upstream's
+# Dockerfile runs as root; there is no reason to.
+USER node
+
+ENTRYPOINT ["node", "dist/http.js"]

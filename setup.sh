@@ -1,52 +1,95 @@
 #!/usr/bin/env bash
-# OpenClaw Setup Script
-# This script prepares the host environment by creating necessary directories
-# with the correct user permissions and copying configuration templates.
+# OpenClaw multi-cell enclave setup.
+# Creates directories, materializes example configs, and prepares .env.
+# Does not start Docker and never writes real secrets.
 
-set -e
+set -euo pipefail
 
-echo "Starting OpenClaw environment setup..."
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+
+echo "Starting OpenClaw enclave setup..."
 echo "--------------------------------------"
 
-# 1. Create Enclave Directories
+# 1. Enclave directories (workspaces, exchange airlock, projects mount point)
 echo "Checking and creating enclave directories..."
-mkdir -p openclaw-enclave/workspace
-mkdir -p openclaw-enclave/scripts
-mkdir -p openclaw-enclave/openclaw-projects-folder/coding-projects/
-mkdir -p openclaw-enclave/openclaw-secure-config
+mkdir -p \
+  openclaw-enclave/workspace \
+  openclaw-enclave/workspace-scout/.inbox-state \
+  openclaw-enclave/workspace-curator \
+  openclaw-enclave/openclaw-projects-folder/coding-projects \
+  openclaw-enclave/openclaw-secure-config \
+  openclaw-enclave/openclaw-secure-config-scout \
+  openclaw-enclave/openclaw-secure-config-curator \
+  openclaw-enclave/exchange/{raw,normalized,briefs,briefs-pending,briefs-flagged,requests,inbox,inbox/archive,reviews,ledger} \
+  openclaw-enclave/backups
+
+# Exchange + workspaces must be writable by the container user (node, uid 1000).
+if command -v chmod >/dev/null 2>&1; then
+  chmod -R u+rwX,go+rX openclaw-enclave/exchange openclaw-enclave/workspace \
+    openclaw-enclave/workspace-scout openclaw-enclave/workspace-curator 2>/dev/null || true
+fi
 echo "[OK] Enclave directories are ready."
 
-# 2. Setup Environment Variables
-echo "Checking .env file..."
-if [ ! -f ".env" ]; then
-    echo "  -> .env not found. Copying from .env.example..."
-    cp .env.example .env
-    echo "[OK] .env file created."
+# 2. Path-only .env (never secrets)
+echo "Checking openclaw-docker-config/.env..."
+if [ ! -f "openclaw-docker-config/.env" ]; then
+  if [ -f "openclaw-docker-config/.env.example" ]; then
+    cp openclaw-docker-config/.env.example openclaw-docker-config/.env
+    echo "[OK] .env created from .env.example (edit paths before first run)."
+  else
+    echo "[WARNING] openclaw-docker-config/.env.example missing."
+  fi
 else
-    echo "[OK] .env file already exists."
+  echo "[OK] .env already exists."
 fi
 
-# 3. Setup OpenClaw Configuration
-echo "Checking openclaw.json configuration..."
-if [ ! -f "openclaw-enclave/openclaw-secure-config/openclaw.json" ]; then
-    if [ -f "openclaw-enclave/openclaw-secure-config/openclaw.example.json" ]; then
-        echo "  -> openclaw.json not found. Copying from openclaw.example.json..."
-        cp openclaw-enclave/openclaw-secure-config/openclaw.example.json openclaw-enclave/openclaw-secure-config/openclaw.json
-        echo "[OK] openclaw.json file created."
+# 3. Cell configs: example → runtime openclaw.json (gitignored)
+materialize_config() {
+  local dir="$1"
+  local example="$dir/openclaw.example.json"
+  local runtime="$dir/openclaw.json"
+  if [ ! -f "$runtime" ]; then
+    if [ -f "$example" ]; then
+      cp "$example" "$runtime"
+      echo "[OK] $runtime created from example."
     else
-        echo "[WARNING] openclaw.example.json not found in openclaw-enclave/openclaw-secure-config/."
+      echo "[WARNING] missing $example"
     fi
-else
-    echo "[OK] openclaw.json already exists."
-fi
+  else
+    echo "[OK] $runtime already exists."
+  fi
+}
+
+echo "Checking cell openclaw.json configs..."
+materialize_config "openclaw-enclave/openclaw-secure-config"
+materialize_config "openclaw-enclave/openclaw-secure-config-scout"
+materialize_config "openclaw-enclave/openclaw-secure-config-curator"
+
+# 4. Host secrets directory (outside repo) — empty scaffold only
+SECRETS_DIR="${OPENCLAW_SECRETS_DIR:-$HOME/.openclaw-secrets}"
+mkdir -p "$SECRETS_DIR"
+chmod 700 "$SECRETS_DIR" 2>/dev/null || true
+echo "[OK] Secrets directory: $SECRETS_DIR"
+echo "     Populate openclaw-secrets.json, scout-secrets.json, curator-secrets.json"
+echo "     (or run openclaw-docker-config/launch-openclaw.sh on macOS to load Keychain)."
 
 echo "--------------------------------------"
-echo "Setup Complete!"
-echo "Next steps:"
-echo "1. Edit the '.env' file in the root directory to add your API keys."
-echo "2. Check 'openclaw-enclave/openclaw-secure-config/openclaw.json' to ensure configuration is correct."
-echo "3. Run the following commands to start OpenClaw:"
+echo "Setup complete."
 echo ""
-echo "   cd openclaw-docker-config"
-echo "   docker-compose up -d --build"
+echo "Next steps:"
+echo "  1. Edit openclaw-docker-config/.env  (HOST_PROJECTS_ROOT, …)"
+echo "  2. Edit each cell's openclaw.json  (Slack channel IDs if you use Slack)"
+echo "  3. Place secrets under $SECRETS_DIR  (see .env.example comments)"
+echo "  4. Start the stack:"
+echo ""
+echo "       cd openclaw-docker-config"
+echo "       ./launch-openclaw.sh          # macOS Keychain path"
+echo "       # or: docker compose up -d --build"
+echo ""
+echo "  5. Optional control plane:"
+echo "       cd control-plane && npm install && npm run dev:api & npm run dev:web"
+echo ""
+echo "  6. Static security check (no Docker):"
+echo "       python3 tools/enclave-check/check.py -v"
 echo ""

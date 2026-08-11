@@ -1,0 +1,68 @@
+name: Validate Compose
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "openclaw-docker-config/**"
+      - ".github/workflows/validate-compose.yml"
+  pull_request:
+    paths:
+      - "openclaw-docker-config/**"
+      - ".github/workflows/validate-compose.yml"
+
+concurrency:
+  group: compose-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compose-config:
+    name: docker compose config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Placeholder .env for interpolation
+        run: |
+          set -euo pipefail
+          if [ -f openclaw-docker-config/.env.example ]; then
+            cp openclaw-docker-config/.env.example openclaw-docker-config/.env
+          else
+            cat > openclaw-docker-config/.env <<'EOF'
+          HOST_PROJECTS_ROOT=/tmp/openclaw-projects
+          CONTAINER_PROJECTS_ROOT=/home/node/projects
+          EOF
+          fi
+          # Required by compose secrets: file: ${HOME}/.openclaw-secrets/*.json
+          # Create empty placeholder files so `compose config` can resolve paths.
+          mkdir -p "$HOME/.openclaw-secrets"
+          for f in openclaw-secrets.json scout-secrets.json curator-secrets.json; do
+            echo '{}' > "$HOME/.openclaw-secrets/$f"
+            chmod 600 "$HOME/.openclaw-secrets/$f"
+          done
+          mkdir -p /tmp/openclaw-projects
+
+      - name: docker compose config (main)
+        working-directory: openclaw-docker-config
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml config --quiet
+          echo "docker-compose.yml: OK"
+
+      - name: docker compose config (cell3-bridge override, if present)
+        working-directory: openclaw-docker-config
+        run: |
+          set -euo pipefail
+          if [ -f docker-compose.cell3-bridge.yml ]; then
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.cell3-bridge.yml \
+              config --quiet
+            echo "docker-compose.yml + cell3-bridge: OK"
+          else
+            echo "no cell3-bridge override — skipped"
+          fi

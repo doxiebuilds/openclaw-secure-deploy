@@ -1,0 +1,191 @@
+{
+  "secrets": {
+    "providers": {
+      "default": {
+        "source": "env"
+      },
+      "docker-secrets": {
+        "source": "file",
+        "path": "/run/secrets/openclaw_secrets",
+        "mode": "json",
+        "timeoutMs": 5000,
+        "maxBytes": 65536
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/home/node/.openclaw/workspace",
+      "model": "qwen-local/qwen/qwen3.6-35b-a3b",
+      "thinkingDefault": "high",
+      "memorySearch": {
+        "enabled": false
+      },
+      "sandbox": {
+        "mode": "off"
+      },
+      "subagents": {
+        "maxSpawnDepth": 1,
+        "maxChildrenPerAgent": 1,
+        "maxConcurrent": 1,
+        "runTimeoutSeconds": 300
+      }
+    },
+    "list": [
+      {
+        "id": "scout",
+        "default": true,
+        "description": "Fetches public sources into /home/node/exchange/raw. One fetch per scheduled run (build-guard). No repo, no exec, no spawning.",
+        "workspace": "/home/node/.openclaw/workspace",
+        "skills": [],
+        "tools": {
+          "allow": [
+            "read",
+            "write",
+            "web_search",
+            "web_fetch",
+            "session_status",
+            "perplexity__perplexity_search"
+          ],
+          "deny": [
+            "exec",
+            "process",
+            "code_execution",
+            "cron",
+            "edit",
+            "apply_patch",
+            "sessions_spawn",
+            "sessions_send",
+            "subagents",
+            "skill_workshop",
+            "x_search",
+            "image_generate",
+            "music_generate",
+            "video_generate"
+          ],
+          "fs": {
+            "workspaceOnly": false
+          },
+          "exec": {
+            "security": "deny",
+            "ask": "always"
+          },
+          "elevated": {
+            "enabled": false
+          }
+        }
+      }
+    ]
+  },
+  "gateway": {
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": {
+        "source": "file",
+        "provider": "docker-secrets",
+        "id": "/gateway/authToken"
+      },
+      "rateLimit": {
+        "maxAttempts": 10,
+        "windowMs": 60000,
+        "lockoutMs": 300000,
+        "exemptLoopback": true
+      }
+    },
+    "port": 18789,
+    "bind": "lan",
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
+    "controlUi": {
+      "allowInsecureAuth": false,
+      "allowedOrigins": [
+        "http://127.0.0.1:18829"
+      ]
+    }
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "cron": {
+    "triggers": {
+      "enabled": true,
+      "minIntervalMs": 60000
+    }
+  },
+  "tools": {
+    "profile": "coding",
+    "exec": {
+      "mode": "auto",
+      "strictInlineEval": true
+    },
+    "loopDetection": {
+      "enabled": true,
+      "historySize": 30,
+      "warningThreshold": 5,
+      "criticalThreshold": 8,
+      "globalCircuitBreakerThreshold": 15,
+      "detectors": {
+        "genericRepeat": true,
+        "knownPollNoProgress": true,
+        "pingPong": true
+      }
+    },
+    "web": {
+      "search": {
+        "enabled": true,
+        "provider": "duckduckgo"
+      },
+      "fetch": {
+        "enabled": true,
+        "useTrustedEnvProxy": true
+      }
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "qwen-local": {
+        "baseUrl": "http://qwen-forward:1234/v1",
+        "apiKey": "dummy",
+        "api": "openai-completions",
+        "timeoutSeconds": 180,
+        "models": [
+          {
+            "id": "qwen/qwen3.6-35b-a3b",
+            "name": "Qwen 3.6 35B A3B",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "mcp": {
+    "servers": {
+      "perplexity": {
+        "url": "http://perplexity-mcp:8080/mcp",
+        "transport": "streamable-http",
+        "requestTimeoutMs": 60000,
+        "connectionTimeoutMs": 5000
+      }
+    }
+  },
+  "plugins": {
+    "allow": [
+      "build-guard"
+    ],
+    "bundledDiscovery": "compat",
+    "load": {
+      "paths": [
+        "/home/node/plugins/build-guard"
+      ]
+    }
+  }
+}
