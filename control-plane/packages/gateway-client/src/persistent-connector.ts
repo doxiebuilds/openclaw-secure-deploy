@@ -38,6 +38,23 @@ import { GatewayNotFoundError, getGatewayOrThrow, loadFleet } from './fleet.js';
 import { GatewayCallError } from './connector.js';
 import type { GatewayCallFailure, GatewayCallResult, GatewayConnector } from './connector.js';
 
+/**
+ * `readyState` for an open socket, per the WHATWG spec (the value is fixed and
+ * cannot drift).
+ *
+ * Deliberately NOT `WebSocket.OPEN`: that reads a property off the global
+ * constructor, which Node only defines from v22. `createSocket` exists so a
+ * caller can supply its own socket — the tests inject a fake and never open a
+ * real connection — but a bare `WebSocket.OPEN` still touched the global and
+ * threw "WebSocket is not defined" underneath the injected socket, failing six
+ * specs on Node 20 that had no business needing a WebSocket implementation.
+ *
+ * Constructing a real socket (see `createSocket`'s default below) does still
+ * require a runtime with a global WebSocket; that is why this package's
+ * `engines.node` is `>=22`.
+ */
+const WS_OPEN = 1;
+
 export type GatewayEvent = {
   gatewayId: string;
   event: string;
@@ -183,7 +200,7 @@ class GatewayLink {
    */
   ensureReady(): Promise<void> {
     if (this.closed) return Promise.reject(new Error('connector closed'));
-    if (this.state === 'ready' && this.ws?.readyState === WebSocket.OPEN) return Promise.resolve();
+    if (this.state === 'ready' && this.ws?.readyState === WS_OPEN) return Promise.resolve();
     if (this.readyPromise) return this.readyPromise;
 
     // Respect the backoff window even for on-demand calls. Without this, a
@@ -446,7 +463,7 @@ class GatewayLink {
   async call<T>(method: string, params: unknown, timeoutMs?: number): Promise<T> {
     await this.ensureReady();
     const ws = this.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    if (!ws || ws.readyState !== WS_OPEN) {
       throw new Error(`gateway ${this.gateway.id} is not connected`);
     }
 

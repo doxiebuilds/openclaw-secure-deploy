@@ -219,11 +219,15 @@ jobs:
             out("test");
           ' >> "$GITHUB_OUTPUT"
 
-      - name: Set up Node 20
+      # Node 22, not 20: PersistentGatewayConnector constructs a global
+      # WebSocket, which Node only defines from v22. On 20 the control plane
+      # would typecheck and install cleanly, then fail at the first gateway
+      # RPC — so pinning 20 here tested a runtime the code cannot run on.
+      - name: Set up Node 22
         if: steps.pkg.outputs.present == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: control-plane/package-lock.json
 
