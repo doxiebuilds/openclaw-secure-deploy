@@ -1,0 +1,53 @@
+name: Verification failure
+description: A documented proof didn't behave as stated. This is exactly the report I want.
+title: "[verify] "
+labels: ["verification"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The README says every verification command "should fail or return the stated value.
+        If one of these doesn't behave as documented, that's a bug and I want to know."
+        This template is that promise.
+  - type: input
+    id: command
+    attributes:
+      label: Command
+      description: The exact command you ran, copy-pasted.
+      placeholder: python3 tools/enclave-check/check.py -v
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Documented expectation
+      description: What the README/SECURITY.md says should happen.
+      placeholder: "Expect: 8 PASS 0 FAIL 0 UNKNOWN"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual output
+      description: Full output, trimmed to the relevant part. Redact hostnames and tokens.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Docker version, and whether the stack was running.
+      placeholder: |
+        macOS 15.5 / Docker Desktop 4.43
+        Stack: up (docker compose up -d) or static checks only
+    validations:
+      required: true
+  - type: textarea
+    id: changes
+    attributes:
+      label: Local changes
+      description: Any edits to compose files, openclaw.json, allowlists, or mounts — "none, fresh clone" is a perfectly good answer.
+      placeholder: none, fresh clone
+    validations:
+      required: false

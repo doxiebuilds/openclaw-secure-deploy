@@ -135,3 +135,8 @@ openclaw-enclave/scripts/tests/injection/report.md
 
 # Personal / maintainer-only tooling (local machine only; not published)
 tools/private/
+
+# Launch/marketing drafts. Local working notes, deliberately not published:
+# a repo that ships its own promotion copy reads badly to the people it is
+# trying to reach.
+launch/
