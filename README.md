@@ -7,6 +7,8 @@
 [![License: MIT](https://img.shields.io/github/license/doxiebuilds/openclaw-secure-deploy)](LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doxiebuilds/openclaw-secure-deploy)
 
+[Quick start](#quick-start) · [What it doesn't stop](#what-this-does-not-stop) · [How it works](#three-cells-and-an-airlock) · [Verify it yourself](#verify-it-yourself) · [Security posture](SECURITY.md)
+
 An autonomous agent is useful because it runs commands without asking you first. That is also the entire problem. The property you want and the property that should worry you are the same property, and no amount of prompting removes it.
 
 So this project doesn't try to make the agent trustworthy. It assumes the agent will eventually do something you didn't intend, through a bug, a bad model day, or a webpage that told it to, and asks a narrower question:
