@@ -1,0 +1,293 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  enclave-check:
+    name: enclave-check (static)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Materialize example agent configs for the static model
+        # Compose mounts openclaw.json; the public tree tracks openclaw.example.json.
+        # Copy examples into the runtime names so enclave-check can resolve cells.
+        run: |
+          set -euo pipefail
+          for cell in \
+            openclaw-secure-config \
+            openclaw-secure-config-scout \
+            openclaw-secure-config-curator
+          do
+            src="openclaw-enclave/${cell}/openclaw.example.json"
+            dst="openclaw-enclave/${cell}/openclaw.json"
+            if [ -f "$src" ]; then
+              cp "$src" "$dst"
+              echo "materialized $dst from example"
+            else
+              echo "note: missing $src (cell may report UNKNOWN)"
+            fi
+          done
+
+      - name: Provide placeholder compose .env
+        run: |
+          set -euo pipefail
+          if [ -f openclaw-docker-config/.env.example ]; then
+            cp openclaw-docker-config/.env.example openclaw-docker-config/.env
+          else
+            cat > openclaw-docker-config/.env <<'EOF'
+          HOST_PROJECTS_ROOT=/tmp/openclaw-projects
+          CONTAINER_PROJECTS_ROOT=/home/node/projects
+          EOF
+          fi
+          # Ensure projects root exists so unresolved-path noise is reduced.
+          mkdir -p /tmp/openclaw-projects
+
+      - name: Run enclave-check
+        # Static only: never invokes docker. Exit 0 = all PASS.
+        # Exit 2 = UNKNOWN (treated as failure here so drift is visible).
+        # Relative bind sources in compose are resolved against the compose
+        # file directory (Docker Compose semantics); enclave-check matches that.
+        run: |
+          set -euo pipefail
+          if [ ! -f tools/enclave-check/check.py ]; then
+            echo "tools/enclave-check/check.py missing — skip"
+            exit 0
+          fi
+          if [ ! -f openclaw-docker-config/docker-compose.yml ]; then
+            echo "compose missing — skip"
+            exit 0
+          fi
+          python3 tools/enclave-check/check.py -v
+
+      - name: Falsify the invariants (negative controls)
+        # THE STEP THAT MAKES THE ONE ABOVE MEAN SOMETHING. It mutates a throwaway
+        # copy of the tree — give the sealer a model, let the curator mount
+        # briefs-flagged/, widen NO_PROXY — and reports UNFALSIFIABLE for any
+        # invariant that still PASSes under its own mutation. A check that cannot
+        # fail is not evidence, and three real bugs were found exactly this way.
+        run: |
+          set -euo pipefail
+          if [ ! -f tools/enclave-check/negative-controls.py ]; then
+            echo "negative-controls.py missing — fail (it is what makes a PASS credible)"
+            exit 1
+          fi
+          python3 tools/enclave-check/negative-controls.py
+
+  build-guard:
+    name: build-guard (permission gate)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run build-guard tests
+        # ~50 assertions over the in-process permission gate: per-agent path
+        # confinement, credential-read denial, the one-shot fetch budget, and the
+        # exec allowlist. No node_modules — the suite reads index.mjs as text and
+        # stubs its single SDK import.
+        #
+        # This suite is in CI because of what its own comments record: an
+        # assertion sat failing for six days because nothing was running it. A
+        # permission test that lives only on the maintainer's laptop is a
+        # permission test that is not being run.
+        run: |
+          set -euo pipefail
+          suite=openclaw-enclave/plugins/build-guard/test-guard.mjs
+          if [ ! -f "$suite" ]; then
+            echo "build-guard suite missing — fail (required for public claims)"
+            exit 1
+          fi
+          node "$suite"
+
+  injection-benchmark:
+    name: injection-benchmark (airlock hops)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify the sealer loader still bites
+        # RUNS BEFORE THE SUITE, ON PURPOSE. Every hop ③ row asserts something
+        # about a function regex-extracted from a shell heredoc. If that
+        # extraction silently returned nothing, the cases would fail identically
+        # and the reason would be invisible under nineteen rows of schema noise —
+        # or worse, pass vacuously. Two negative cases (renamed opener, renamed
+        # brief_violation) must both raise.
+        run: |
+          set -euo pipefail
+          python3 openclaw-enclave/scripts/tests/injection/run.py --self-check
+
+      - name: Run cross-boundary injection suite
+        # Host-side only: no Docker, no network, no model.
+        # Proves hops ① (normalize), ③ (brief schema) and ③b (the sealer's
+        # cross-check). Hop ② SKIPs until a curator turn is instrumented and
+        # hop ④ contributes no cases; SKIP is not a pass and not a fail.
+        # Exit non-zero if any case is stopped by the wrong hop or cause.
+        run: |
+          set -euo pipefail
+          suite=openclaw-enclave/scripts/tests/injection/run.py
+          if [ ! -f "$suite" ]; then
+            echo "injection suite missing — fail (required for public claims)"
+            exit 1
+          fi
+          python3 "$suite" --report "$GITHUB_WORKSPACE/injection-report.md"
+
+      - name: Publish the per-hop table to the run summary
+        # The report is the product of the suite; a job whose only output is an
+        # exit code makes a reader re-run it locally to learn anything.
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f "$GITHUB_WORKSPACE/injection-report.md" ]; then
+            cat "$GITHUB_WORKSPACE/injection-report.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No injection report produced — the suite failed before writing one." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload injection report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: injection-report
+          path: injection-report.md
+          if-no-files-found: warn
+
+      - name: Check the published hop table has not drifted
+        # SECURITY.md publishes per-hop coverage counts. They are generated by
+        # the suite, so this fails the build the moment the doc and the code
+        # disagree. test-guard.mjs:145-148 records an assertion that rotted for
+        # six days because nothing ran it; a hand-maintained table in a security
+        # doc rots the same way, except a reader cannot tell.
+        run: |
+          set -euo pipefail
+          python3 openclaw-enclave/scripts/tests/injection/run.py \
+            --check-doc-table SECURITY.md
+
+  control-plane:
+    name: control-plane (typecheck + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: control-plane
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect package scripts
+        id: pkg
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          if [ ! -f control-plane/package.json ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "present=true" >> "$GITHUB_OUTPUT"
+          node -e '
+            const p = require("./control-plane/package.json");
+            const s = p.scripts || {};
+            const out = (k) => console.log(`${k}=${s[k] ? "true" : "false"}`);
+            out("typecheck");
+            out("test");
+          ' >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node 20
+        if: steps.pkg.outputs.present == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: control-plane/package-lock.json
+
+      - name: Install
+        if: steps.pkg.outputs.present == 'true'
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Typecheck
+        if: steps.pkg.outputs.present == 'true' && steps.pkg.outputs.typecheck == 'true'
+        run: npm run typecheck
+
+      - name: Test
+        if: steps.pkg.outputs.present == 'true' && steps.pkg.outputs.test == 'true'
+        run: npm run test
+
+      - name: Skip notice
+        if: steps.pkg.outputs.present != 'true'
+        run: echo "control-plane/package.json not present — skipped"
+
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: false
+
+      - name: Pattern scan (zero-dependency shapes)
+        # Mirrors .githooks/pre-commit shapes: require trailing key material so
+        # documentation of the prefixes does not self-match. Uses grep so the
+        # job does not depend on ripgrep being preinstalled on the runner.
+        run: |
+          set -euo pipefail
+          PATTERNS='xoxb-[0-9]|xapp-[0-9]|xoxp-[0-9]|lin_api_[A-Za-z0-9]{10}|pplx-[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|github_pat_[A-Za-z0-9_]{10}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----'
+          # Exclude hooks/workflows that document the patterns, VCS metadata,
+          # dependencies, and migration notes.
+          hits="$(
+            grep -RInE \
+              --exclude-dir=.git \
+              --exclude-dir=.githooks \
+              --exclude-dir=.github \
+              --exclude-dir=node_modules \
+              --exclude-dir=dist \
+              --exclude-dir=.venv \
+              --exclude='.migration-notes-*.md' \
+              --exclude='package-lock.json' \
+              --exclude='*.lock' \
+              -e "$PATTERNS" . 2>/dev/null || true
+          )"
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            echo "::error::Credential-shaped string found in the tree (see matches above)."
+            exit 1
+          fi
+          echo "Pattern scan clean."

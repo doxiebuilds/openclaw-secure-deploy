@@ -1,23 +1,137 @@
-# Secrets
+# ─────────────────────────────────────────────────────────────────────────────
+# Public-repo hardened ignore list.
+# Runtime state, secrets, exchange content, and multi-cell config state stay out.
+# Example configs and README.md under cell config dirs stay in.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Secrets & env ────────────────────────────────────────────────────────────
 .env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*.keystore
 
-# Others
+# Host secrets dir if ever placed in-tree (real store is outside the repo).
+.openclaw-secrets/
+**/.openclaw-secrets/
+openclaw-docker-config/secrets/
+**/secrets/
+
+# Common secret / dump filenames.
+# Anchored to plausible dump names rather than a bare `*credentials*` substring:
+# that form also matches source like `credentialsHelper.ts` or a doc named
+# `credentials-policy.md`, and an ignored source file fails silently — it never
+# shows in `git status`, so the first symptom is a clone that does not build.
+*.secret
+*.secrets
+credentials
+credentials.*
+*-credentials
+*-credentials.*
+*.credentials
+**/openclaw-secrets.json
+**/scout-secrets.json
+**/curator-secrets.json
+
+# ── Editor / OS noise ────────────────────────────────────────────────────────
 *.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
 
-# Ignore all files in openclaw-secure-config except openclaw.example.json
+# ── Python / Node build artefacts ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+coverage/
+.nyc_output/
+
+# ── Docker / local sandbox leftovers ─────────────────────────────────────────
+*.sandbox
+*.log
+docker-compose.override.yml
+
+# ── Cell 3 (main) secure-config: examples only ───────────────────────────────
+# Runtime state (sqlite, mcp-oauth tokens, logs, identity, devices, sessions)
+# must never be published. Track the example config only.
 openclaw-enclave/openclaw-secure-config/*
 !openclaw-enclave/openclaw-secure-config/openclaw.example.json
+!openclaw-enclave/openclaw-secure-config/README.md
 
-# Ignore all files in workspace
+# Runtime openclaw.json (local copy of the example, or live config) — ignore.
+openclaw-enclave/**/openclaw.json
+
+# ── Scout / curator secure-config: example + README only ─────────────────────
+openclaw-enclave/openclaw-secure-config-scout/*
+!openclaw-enclave/openclaw-secure-config-scout/openclaw.example.json
+!openclaw-enclave/openclaw-secure-config-scout/README.md
+
+openclaw-enclave/openclaw-secure-config-curator/*
+!openclaw-enclave/openclaw-secure-config-curator/openclaw.example.json
+!openclaw-enclave/openclaw-secure-config-curator/README.md
+
+# ── Host-only backups (exec-approvals snapshots, HMAC material, etc.) ────────
+openclaw-enclave/backups/
+**/backups/
+
+# ── Exchange: hostile/model content, never source ────────────────────────────
+openclaw-enclave/exchange/**
+!openclaw-enclave/exchange/.gitkeep
+
+# ── Workspaces: runtime agent files; optional IDENTITY.md example allowed ───
 openclaw-enclave/workspace/*
 !openclaw-enclave/workspace/IDENTITY.md
+!openclaw-enclave/workspace/IDENTITY.example.md
 
-# Ignore all files in projects-folder
-openclaw-enclave/openclaw-projects-folder/*
+openclaw-enclave/workspace-scout/*
+!openclaw-enclave/workspace-scout/IDENTITY.md
+!openclaw-enclave/workspace-scout/IDENTITY.example.md
+!openclaw-enclave/workspace-scout/README.md
 
-# Docker
-*.sandbox
+openclaw-enclave/workspace-curator/*
+!openclaw-enclave/workspace-curator/IDENTITY.md
+!openclaw-enclave/workspace-curator/IDENTITY.example.md
+!openclaw-enclave/workspace-curator/README.md
 
-# Ignore all files in scripts
-openclaw-enclave/scripts/*
-!openclaw-enclave/scripts/cron-search.example.sh
+# ── Projects folder / worktrees (operator content) ───────────────────────────
+openclaw-enclave/openclaw-projects-folder/**
+**/.worktrees/
+
+# ── Control-plane runtime / multi-cell ops state ─────────────────────────────
+# `**/` matches zero or more directories, so this covers both control-plane/data/
+# and nested ones like control-plane/apps/api/data/ (runtime audit logs, sqlite,
+# device identity). The anchored `control-plane/data/` form missed the nested
+# ones, which is why control-plane used to carry its own .gitignore.
+control-plane/**/data/
+control-plane/**/secrets/
+control-plane/**/.env
+control-plane/**/.env.*
+!control-plane/**/.env.example
+# Local probe dumps that may contain tokens if someone re-ran without redaction
+control-plane/scripts/bootstrap/fixtures/*-unredacted*
+control-plane/scripts/bootstrap/fixtures/*secret*
+control-plane/scripts/bootstrap/fixtures/*token*
+
+# ── Scripts: allow tracked scripts; ignore local logs / generated reports ───
+openclaw-enclave/scripts/*.log
+openclaw-enclave/scripts/**/__pycache__/
+openclaw-enclave/scripts/tests/injection/report.md
+
+# ── Scratch / local notes ───────────────────────────────────────────────────
+.migration-notes-*.md
+
+# Personal / maintainer-only tooling (local machine only; not published)
+tools/private/
