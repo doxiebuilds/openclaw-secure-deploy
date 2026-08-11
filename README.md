@@ -1,5 +1,7 @@
 # OpenClaw Secure Deployment
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doxiebuilds/openclaw-secure-deploy)
+
 Runs [OpenClaw](https://github.com/openclaw) as a **multi-cell** Docker enclave with almost every privilege removed. Personal project, no security audit.
 
 An autonomous agent is useful because it runs commands without asking you first. That is also the entire problem. The property you want and the property that should worry you are the same property, and no amount of prompting removes it.
