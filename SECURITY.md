@@ -8,19 +8,23 @@ Useful reports include what you found, how to reproduce it, which component is a
 
 One person maintains this in their spare time, so there is no response SLA. I read every report and I'd rather hear about a problem late than not at all.
 
-## Two things worth knowing before you read the rest
+## Two things you might expect to find here and won't
 
-Both of these weaken the claims further down. They go first so nobody has to find them.
+**There is no Docker socket, and no socket proxy.** Earlier single-container revisions used `docker-socket-proxy` so OpenClaw could manage nested sandboxes. This multi-cell design drops that path entirely. Nested per-session containers require the ability to create containers with arbitrary binds, which is a host-escape primitive. Agent cells have no `DOCKER_HOST` and no socket. That is stricter than what came before. It also means you do not get OpenClaw's nested sandbox feature, because the outer container is the sandbox.
 
-**The socket proxy runs privileged.** Everything in this repo drops privileges except `docker-socket-proxy`, which runs with `privileged: true`. That is a broader grant than any other container here. Two things narrow it: the proxy isn't reachable from the host or the LAN, and its allowed API surface is restricted to container start/stop and image inspection. But if that specific container were compromised, it has more reach than the "zero privileges" language elsewhere implies. It is the softest part of this design and I haven't found a way to remove it while keeping OpenClaw able to manage its own sandboxes.
-
-**Images are pinned to `:latest`.** `ghcr.io/openclaw/openclaw:latest` and `tecnativa/docker-socket-proxy:latest` are both unpinned. That means you get security patches automatically, and it also means you cannot reproduce a known-good build, cannot verify what you're actually running, and inherit whatever ships upstream. If you're running this anywhere that matters, pin both to a digest.
+**Images are pinned by digest in the Dockerfiles, not `:latest`.** Rebuilds should not silently change the binary. Upgrades are an explicit edit to a digest line. If you loosen that, you get patches automatically and you lose reproducibility. 
 
 ## What this does not protect against
 
 Not an exhaustive list. These are the categories that matter most.
 
-**Prompt injection.** Everything here hardens the container against the host. None of it hardens the agent against being tricked. If OpenClaw processes a malicious webpage, email, or file, it will follow instructions embedded in that content, and it can then misuse any credential it holds (API keys, Slack tokens) or wreck anything in its writable `workspace`. Both outbound network access and workspace write access have to stay open for the agent to do useful work, so this gap is structural rather than an oversight.
+**Prompt injection.** Everything here hardens cells against the host and against each other. None of it hardens a model against being tricked. If scout processes a malicious webpage, it will follow instructions in that content.
+
+What the layout buys you is that scout holds no Slack token, no project mount, and can only write into `exchange/raw` for a deterministic sealer to process.
+
+What it does not buy you is a clean break. Main holds Slack, Linear and your project repo, and it reads briefs distilled from the same text scout fetched. The phase ② schema check is the last thing standing between those two facts: a closed-key schema, a sha that must match the source, and `evidence_excerpt` resolved from numbered source lines. A payload that satisfies all three reaches the cell holding your credentials. That barrier is deterministic and small, which is why I trust it more than I would trust a model, but it is one barrier and not a guarantee.
+
+**Perplexity's server-side fetch.** Optional `perplexity-mcp` holds an API key outside any agent process and can retrieve content from hosts that are not on scout's egress allowlist. The allowlist bounds where scout's own connections terminate. Server-side retrieval is a different channel. Scout still cannot reach your repos or main's secrets.
 
 **Unknown vulnerabilities.** A container escape in the kernel, Docker, containerd, or runc bypasses every control below. Same for a bug in OpenClaw itself or in any skill, tool, or dependency it loads.
 
@@ -28,86 +32,160 @@ Not an exhaustive list. These are the categories that matter most.
 
 ## What is enforced
 
-Every control below is enforced by the kernel or the container runtime. None of it depends on the agent choosing to cooperate.
+Every control below is enforced by the kernel, the container runtime, or the mount list. None of it depends on the agent choosing to cooperate.
 
-### Container
+### Container (each agent cell)
 
 | Control | Setting | Effect |
 |---|---|---|
 | Read-only root | `read_only: true` | System binaries, libraries, and packages cannot be modified at runtime |
 | Capabilities | `cap_drop: ALL` | Zero Linux capabilities at startup |
 | Escalation | `no-new-privileges:true` | `sudo` and setuid binaries fail immediately |
-| User | runs as `node` | Never root, even inside the container |
+| User | non-root (`node` / as packaged) | Never root, even inside the container |
 
-Exception: the socket proxy, covered above.
+### Cell split
+
+| Cell | Network | Egress | Credentials | Untrusted input |
+|---|---|---|---|---|
+| scout | `net_scout` (internal) | Via `scout-egress-proxy` (+ optional Perplexity MCP) | Gateway token only | Web fetch / search results |
+| curator | `net_curator` (internal) | None off-box (local Qwen only) | Gateway token only | `exchange/normalized` (post-sealer) |
+| main | `net_main` (internal) | Via `main-egress-proxy` allowlist (Slack/Linear hosts) | Gateway + optional Slack | Structured `briefs/` only, never `raw/` |
+| quarantine-sealer | `network_mode: none` | None | None | File system only, fixed script |
 
 ### Docker API
 
-The container never touches `/var/run/docker.sock`. Every call goes through `docker-socket-proxy`.
-
-Denied at the proxy: `EXEC`, `VOLUMES`, `NETWORKS`, `SYSTEM`, `AUTH`, `SWARM`.
-Allowed: container start/stop, image inspection. Nothing else.
-
-That combination is what stops OpenClaw from running commands on the host or reaching other containers, while still letting it manage its own sandbox lifecycle.
+Agent cells never touch `/var/run/docker.sock`. There is no socket proxy in the default stack. Nested sandboxing was removed on purpose, see the note at the top of this file.
 
 ### Filesystem
 
-Writable: `openclaw-enclave/workspace`, and the projects folder with controlled read-write access.
-Read-only: `openclaw.json`, all scripts, everything else in the enclave.
-Invisible: any host path outside the enclave.
+Writable paths are cell-specific workspaces, plus the exchange directories each cell is allowed to touch. Example configs and scripts mount read-only where possible. Host paths outside the enclave are invisible.
+
+**The mount list is the security boundary.** Main does not mount `exchange/raw` or `exchange/normalized`. Even if every in-process guard fails, main cannot read hostile fetched text at the Docker layer. There is a command below that checks this.
 
 ### Network
 
-The container sits on an isolated `openclaw-internal` network. The gateway on port `18789` is bound to `127.0.0.1`, so it should not answer from anywhere but the local machine. Don't take that on faith, scan it from another device (command below).
+Agent cells sit on dedicated `internal: true` networks. They have no default route to the public internet. Dual-homed helper containers (`*-egress-proxy`, `perplexity-mcp`, UI forwards, `qwen-forward`) are the only bridges, and each bridge is purpose-built:
 
-DNS resolves through Cloudflare and Google rather than the host resolver, so the container cannot reach internal network services by name. Note that this also sends every lookup to a third party.
+- Egress proxies: default-deny host allowlists
+- UI forwards: inbound localhost bind only (`127.0.0.1`)
+- `qwen-forward`: single hard-coded destination, does not relay between legs
 
-Outbound internet access is open on purpose. Web search and any hosted model provider need it. It is also the channel a compromised agent would use to send data out, which is the tradeoff being made rather than a detail that got missed.
+Outbound internet access from scout exists on purpose. Web search and Perplexity need it. It is also the channel a compromised scout would use to send data out, limited by the fact that scout holds almost nothing.
 
-**To cut outbound access entirely:** mark the `default` network in `docker-compose.yml` as `internal: true`, matching what `openclaw-internal` already does, or remove that network attachment. You get a fully offline agent, and you give up web search and every non-local provider, leaving you on a local model such as LM Studio. Test afterwards, because parts of OpenClaw assume connectivity exists.
+**To cut scout outbound access entirely:** remove or stop `scout-egress-proxy` and `perplexity-mcp`, or empty the allowlist and drop Perplexity. You get an offline research cell, and you give up web search. Test afterwards.
 
-## Verify it yourself
-
-Each command below should fail, or return the stated value. If one doesn't, that's a bug and I want to know.
-
-```bash
-# Root filesystem is read-only.  Expect: "Read-only file system"
-docker exec openclaw touch /test_file
-
-# Privilege escalation is blocked.  Expect: command not found, or permission denied
-docker exec openclaw sudo su
-
-# All capabilities dropped.  Expect: [ALL]
-docker inspect openclaw --format='{{.HostConfig.CapDrop}}'
-
-# Read-only rootfs is actually set.  Expect: true
-docker inspect openclaw --format='{{.HostConfig.ReadonlyRootfs}}'
-
-# no-new-privileges is applied.  Expect: no-new-privileges:true in the list
-docker inspect openclaw --format='{{.HostConfig.SecurityOpt}}'
-
-# Docker socket is absent.  Expect: "No such file or directory"
-docker exec openclaw ls -l /var/run/docker.sock
-
-# Gateway is not on the LAN.  Run from a DIFFERENT machine.  Expect: connection refused or timeout
-curl -m 3 http://<your-lan-ip>:18789
-```
-
-Longer walkthrough in [docs/security_verification.md](docs/security_verification.md).
-
-## Secrets
+### Secrets
 
 Never commit secrets to this repository.
 
-`.env` holds your real credentials and is gitignored, so it will not be pushed. Only `.env.example`, with placeholders, is version controlled. Fill in `.env` before your first run, rotate tokens on whatever schedule you'd use for any other credential, and keep file permissions tight.
+- Gateway and Slack tokens are **not** injected as environment variables into agent processes. They arrive as Docker secrets files under `/run/secrets/`, referenced from config via SecretRefs.
+- On the host they live under `~/.openclaw-secrets/` (outside the git tree), mode `0600`.
+- `openclaw-docker-config/.env` is for **paths** (`HOST_PROJECTS_ROOT`, and similar), not tokens. Only `.env.example` is version controlled.
+- Optional `PERPLEXITY_API_KEY` is injected into the Perplexity MCP container only, never into scout, curator, or main.
+- A pre-commit hook (`.githooks/pre-commit`) and CI secret-scan refuse credential-shaped strings and literal tokens in committed `openclaw*.json`.
 
-Worth repeating: the isolation here does nothing to stop a manipulated agent from using these keys as intended. Give it the narrowest-scoped tokens that still let it work.
+Worth repeating: isolation does nothing to stop a manipulated agent from using a key it legitimately holds. Give the narrowest-scoped tokens that still let the cell work.
+
+### Static and CI checks
+
+| Check | What it proves |
+|---|---|
+| `tools/enclave-check/check.py` | Compose topology invariants (no lethal trifecta path, sealer-only brief writes, internal networks, and the rest) without running Docker |
+| `tools/enclave-check/negative-controls.py` | That the invariants above can still **fail**. Mutates a throwaway copy of the tree — sealer gets a model, curator mounts `briefs-flagged/`, `NO_PROXY` widens — and reports UNFALSIFIABLE for any invariant that survives its own mutation |
+| `openclaw-enclave/scripts/tests/injection/run.py` | Airlock hops ① (normalize), ③ (brief schema) and ③b (the sealer's cross-check) against hostile fixtures. Per-hop table, not a fake aggregate score. Hop ② (curator) is stubbed and SKIPs; hop ④ (routing) is not instrumented and contributes no cases. Does **not** claim model-level injection resistance |
+| `run.py --self-check` | That the hop ③ rows are not vacuous — the validator really is being extracted from the sealer, and a renamed heredoc or a renamed `brief_violation` raises instead of yielding an empty namespace |
+| `openclaw-enclave/plugins/build-guard/test-guard.mjs` | The in-process permission gate: per-agent path confinement, credential-read denial, the one-shot fetch budget, and the exec allowlist |
+| Control-plane `npm test` / typecheck | Operator UI/API regressions |
+| `docker compose config` | Compose files still interpolate |
+| gitleaks + pattern scan | Credential-shaped material did not land in the tree |
+
+`UNKNOWN` from enclave-check is a finding, not a pass. A checker that cannot decide must not report all-clear.
+
+Two of those rows exist to check the checkers. `negative-controls.py` and `--self-check` assert that the other suites can still say no — a control you have only ever watched succeed is not a control you have tested, and `test-guard.mjs` carries a comment recording an assertion that sat failing for six days because nothing was running it. Every suite named here now runs on every push.
+
+### What the injection benchmark covers
+
+Numbers first, then what they are not. The table below is regenerated by the suite itself and CI fails if it drifts from a fresh run, so it describes the code in this commit rather than the code on the day someone typed it.
+
+<!-- injection-hop-table:begin — generated by `run.py --write-doc-table`; do not edit by hand -->
+| Hop | Control | Cases | Exercised | Uninstrumented |
+|---|---|---|---|---|
+| ① normalize | `clean_text` + 400-line / 400-char caps | 4 | 4 | 0 |
+| ② distill | curator turn, `sessionTarget: isolated` | 1 | 0 | 1 |
+| ③ schema | `brief_violation` + `resolve_evidence` | 19 | 19 | 0 |
+| ③b cross-check | `source_reads_imperative` — the sealer's own second opinion | 5 | 5 | 0 |
+| — (reaches cell 3) | nothing — reaches cell 3 (intended) | 5 | 5 | 0 |
+<!-- injection-hop-table:end -->
+
+**These are coverage counts, not a protection rate.** They say how many cases each control answered. They do not say what fraction of real-world payloads the architecture stops, and there is deliberately no total and no percentage: a single "N of M blocked" figure scores a pipeline where four independent controls each catch their own class identically to one where a single control catches everything and the other three are dead code. The second is one config change away from wide open and its aggregate looks perfect right up until it doesn't.
+
+What makes the counts mean anything is that a case fails if it is stopped **at the wrong hop or for the wrong cause**, even when it is stopped. A defence you believe is at hop ③ but is really only at hop ① is a defence you will delete by accident.
+
+Read the table with four caveats:
+
+- **Two of the four hops are unmeasured.** Hop ② needs a live curator model turn and SKIPs; a SKIP is not a pass. Hop ④ (routing between `briefs/` and `briefs-flagged/`) contributes no cases at all — the probe exists in `harness.py` but nothing calls it.
+- **The `— (reaches cell 3)` row is not a failure count.** Those are cases asserting that something *should* cross the gate, including plain-English prose injection, which hop ① passes through by design. That row starting to shrink would mean someone taught the airlock to censor prose, which is a semantic control in the one place this design says there must not be one.
+- **Hop ③ carries most of the weight**, which is the same thing the prompt-injection note at the top of this file admits: it is one barrier, deterministic and small, and not a guarantee.
+- **Nothing here measures model-level injection resistance**, and no arrangement of these numbers would.
+
+One known gap is recorded as a passing case rather than hidden: entity-encoded markup survives hop ① intact, because `clean_text()` strips tags before it unescapes entities. Details and the fix in [the suite's README](openclaw-enclave/scripts/tests/injection/README.md).
+
+## Verify it yourself
+
+### Static, no Docker required
+
+Copy each `openclaw.example.json` to `openclaw.json` first.
+
+```bash
+python3 tools/enclave-check/check.py -v
+python3 openclaw-enclave/scripts/tests/injection/run.py
+```
+
+### With the stack up
+
+Each command should fail, or return the stated value. If one doesn't, that's a bug and I want to know.
+
+```bash
+# Root filesystem is read-only. Expect: "Read-only file system"
+docker exec openclaw touch /test_file
+
+# All capabilities dropped. Expect: [ALL]
+docker inspect openclaw --format='{{.HostConfig.CapDrop}}'
+
+# Read-only rootfs is actually set. Expect: true
+docker inspect openclaw --format='{{.HostConfig.ReadonlyRootfs}}'
+
+# no-new-privileges is applied. Expect: no-new-privileges:true in the list.
+# This is the real escalation test. `sudo su` failing only proves sudo is absent.
+docker inspect openclaw --format='{{.HostConfig.SecurityOpt}}'
+
+# Docker socket is absent. Expect: "No such file or directory"
+docker exec openclaw ls -l /var/run/docker.sock
+
+# THE CORE INVARIANT. Main cannot see raw or normalized. Expect: no output
+docker inspect openclaw --format='{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' \
+  | grep -E 'exchange/(raw|normalized)'
+
+# Sealer has no network at all. Expect: none
+docker inspect quarantine-sealer --format='{{.HostConfig.NetworkMode}}'
+
+# Curator has no route off-box. Expect: timeout, not a response
+docker exec openclaw-curator sh -c 'curl -m 3 https://example.com 2>&1'
+
+# Scout cannot see main's secrets file. Expect: no such file
+docker exec openclaw-scout ls /run/secrets/openclaw_secrets 2>&1
+
+# Gateway is not on the LAN. Run from a DIFFERENT machine. Expect: refused or timeout
+curl -m 3 http://<your-lan-ip>:18789
+```
 
 ## Updates
 
 ```bash
-docker compose pull
-docker compose up -d --build
+cd openclaw-docker-config
+# review Dockerfile digests, then:
+docker compose build --pull=false
+docker compose up -d
 ```
 
-This pulls whatever `:latest` currently points at for both images. See the pinning note at the top of this file before relying on that.
+Do not treat an unpinned `:latest` pull as a security update strategy for this repo. See the pinning note at the top of this file.
