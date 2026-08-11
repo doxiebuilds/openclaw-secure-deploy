@@ -7,4 +7,4 @@ agent-model:main None
 tools.profile=coding
 tools.web.search.enabled=False
 mcp.servers=linear
-guard sha256=670b6cb9225881eb0e3c72ce5e166c6533a82da9563cb7257a7c6c46215d768e
+guard sha256=af649c390d0c619d80c0610940b80261f8902f2007f08afd3f39bb2cf862f787

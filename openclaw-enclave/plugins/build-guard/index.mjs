@@ -96,8 +96,8 @@ const SECRET_READ_PATHS = [
   // every allowlist hit and never passes through this hook, so its lastUsedAt
   // bookkeeping is unaffected.
   "/home/node/.openclaw/exec-approvals.json",
-  // Added 2026-07-31. This list is enumerated, not inferred — security_verification.md
-  // says so: "A credential written to a path not on that list is readable." These two
+  // Added 2026-07-31. This list is enumerated, not inferred: a credential written
+  // to a path not on that list is readable. These two
   // were missing, and state/openclaw.sqlite is the highest-value readable object in
   // the container: every session transcript, so anything ever pasted into a chat.
   // Writes to it were already denied by the PROTECTED_ROOT rule below; reads were not,

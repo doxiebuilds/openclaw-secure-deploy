@@ -46,7 +46,8 @@
 # it would resolve host paths and produce a baseline that never matches.
 # `--print` refuses to emit when an input is unreadable, so a broken state
 # cannot be captured as the new expected state.
-# Canonical procedure and recovery runbook: docs/launch_and_update.md
+# Canonical procedure and recovery runbook: README.md (Quick start),
+# SECURITY.md (Updates).
 
 set -u
 export TZ="America/New_York"
@@ -162,7 +163,7 @@ if [ "${1:-}" = "--print" ]; then
       echo "approvals: refusing to emit a baseline — an input is unreadable:" >&2
       printf '%s\n' "$out" >&2
       echo "approvals: fix the input first, then re-run." >&2
-      echo "approvals: recovery runbook in docs/launch_and_update.md" >&2
+      echo "approvals: recovery runbook in README.md (Quick start)" >&2
       exit 1 ;;
   esac
   printf '%s\n' "$out"
@@ -266,7 +267,7 @@ esac
     echo "openclaw-enclave/backups/ instead. Do NOT regenerate the baseline to"
     echo "make this alert go away — that enshrines the loss."
     echo ""
-    echo "Full runbook: docs/launch_and_update.md"
+    echo "Full runbook: README.md (Quick start)"
   fi
 } > "$REPORT"
 

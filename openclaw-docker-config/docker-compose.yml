@@ -143,7 +143,7 @@ services:
     # SDK had to honour the proxy. There is no frontier provider (see the header)
     # — every cell runs on the local Qwen — so the only clients to prove were
     # Slack socket mode and the Linear MCP endpoint. Both pass; the evidence is
-    # recorded in docs/security_verification.md.
+    # recorded in SECURITY.md ("Network").
     #
     # ⛔ No `ports:`. On an internal network Docker silently DROPS port
     #    publishing — the request lands in HostConfig.PortBindings and
@@ -274,7 +274,7 @@ services:
       # these variables in every configuration, and a client that ignores them
       # on a network with no route simply fails closed, which is acceptable,
       # but a client that ignores them on a routable network is unprotected.
-      # docs/security_verification.md has the negative test.
+      # SECURITY.md ("Verify it yourself") has the negative test.
       - HTTP_PROXY=http://scout-egress-proxy:3128
       - HTTPS_PROXY=http://scout-egress-proxy:3128
       - http_proxy=http://scout-egress-proxy:3128
@@ -333,7 +333,7 @@ services:
       # tool layer, since scout's write allowlist is exchange/raw alone. Two
       # layers, either sufficient. The alternative was storing the script text in
       # the gateway's cron store, which is tamper-proof too but invisible to git,
-      # undiffable, and lost on the rebuild that launch_and_update.md already
+      # undiffable, and lost on the rebuild that README.md (Quick start) already
       # documents as requiring cron re-registration.
       - ../openclaw-enclave/scout-triggers:/home/node/triggers:ro
     deploy:
@@ -408,8 +408,8 @@ services:
   # NOT A FIFTH CELL. A cell is an agent identity plus what its session holds;
   # this has no session, no model and no credential. It is the deterministic
   # gate BETWEEN cells — what the arrows in the pipeline diagram point at.
-  # ("Cell 5" is also already spoken for: security_verification.md:546, the
-  # independent critic with /home/node/projects mounted :ro.)
+  # ("Cell 5" is also already spoken for: the independent critic with
+  # /home/node/projects mounted :ro.)
   #
   # WHY IT EXISTS. quarantine-seal.sh ran from a macOS LaunchAgent every 600s
   # and failed EVERY run with exit 126 "Operation not permitted" — TCC refuses
@@ -685,7 +685,7 @@ services:
   # STAGED, NOT YET IN USE. This runs, but `openclaw` is still on the NAT'd
   # `default` bridge and does not point at it. Attaching cell 3 is done by the
   # override file docker-compose.cell3-proxy.yml, and only after the spike in
-  # docs/security_verification.md shows Slack socket mode and the model SDK
+  # SECURITY.md ("Network") shows Slack socket mode and the model SDK
   # both honour HTTP(S)_PROXY. Shipping it half-working was refused before;
   # this is the same refusal with the proxy pre-built so the test is one
   # command instead of a rewrite.

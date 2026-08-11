@@ -2,7 +2,7 @@
 # REVERT OVERRIDE: put cell 3 back on the NAT'd bridge.
 #
 # THIS WEAKENS THE STACK ON PURPOSE. It undoes the control described in
-# docs/security_verification.md §2: cell 3 regains a default route, public DNS
+# ARCHITECTURE.MD §2: cell 3 regains a default route, public DNS
 # and unrestricted internet. Use it to get working again, then find out what
 # broke and go back to the default.
 #

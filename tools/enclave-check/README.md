@@ -4,8 +4,9 @@ A static checker that derives the **trust topology** of a multi-container agent
 deployment from its config files, then proves or refutes named security
 invariants against that model.
 
-It replaces a class of manual verification. `docs/security_verification.md`
-carries ~55 `docker exec` probes; roughly 30 are one-liners and about half of
+It replaces a class of manual verification. The `docker exec` probe suite (now
+condensed into `SECURITY.md`, "Verify it yourself") carried ~55 probes; roughly
+30 are one-liners and about half of
 those are decidable from the compose file alone ("is cell 3 on a non-internal
 network", "does curator mount briefs/", "is the sealer's `network_mode` still
 `none`", "does any container hold all three exchange directories"). Those
@@ -312,7 +313,7 @@ Static analysis of the configuration answers "what did we ask Docker for", not
   authority on a running stack; this tool is the authority on the next `up`.
 - **Whether a client honours `HTTPS_PROXY`.** The whole `NODE_USE_ENV_PROXY`
   saga in the compose comments is a runtime property. The negative test in
-  `docs/security_verification.md` stays necessary.
+  `SECURITY.md` ("Verify it yourself") stays necessary.
 - **What comes back through an allowed path.** `perplexity-mcp` fetches
   arbitrary pages on cell 1's behalf; `EGRESS_ALLOW` bounds where scout's own
   connections terminate, not where the content it ends up holding came from.

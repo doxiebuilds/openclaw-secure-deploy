@@ -233,7 +233,7 @@ cd "$REPO_DIR"
 #
 # The egress proxy is ON BY DEFAULT since 2026-08-01, when the spike passed
 # (Slack socket mode and the Linear MCP endpoint both traverse it; evidence in
-# docs/security_verification.md). It is the default rather than an opt-in flag
+# SECURITY.md, "Network"). It is the default rather than an opt-in flag
 # because the failure mode of forgetting a flag is silent loss of the control,
 # whereas the failure mode of the proxy itself is loud — net_main is
 # `internal: true`, so a blocked host means "Slack never connects", never a

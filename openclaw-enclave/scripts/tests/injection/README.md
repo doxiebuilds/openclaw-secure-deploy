@@ -67,7 +67,7 @@ semantic control in the one place the design says there must not be one.
 | `harness.py` | the sealer loader, the hop evaluators, and the `check` / `assert_blocked` / `assert_allowed` mini-framework (shape from `test-guard.mjs:49-97`) |
 | `cases.py` | the case table, and `SCHEMA_GENERATION` — the single switch for which brief schema is under test |
 | `run.py` | entry point: runs every case, writes `report.md`, exits 1 on any failure |
-| `fixtures/*.md` | the hostile sources, seeded from the payloads in the repo's earlier `docs/security_verification.md` (since folded into `ARCHITECTURE.MD`) |
+| `fixtures/*.md` | the hostile sources, seeded from the payloads in the repo's earlier `docs/security_verification.md` (since folded into `SECURITY.md` and `ARCHITECTURE.MD`) |
 
 Stdlib only. There is no pytest anywhere in this repo, the container rootfs is read-only
 with no pip, and `lib/normalize.py:20-21` states the rule; the assertion primitives come

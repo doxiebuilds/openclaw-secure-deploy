@@ -22,7 +22,7 @@ worse thing to own than the risk it removes.
 
 IT ONLY WORKS IF THE CLIENT USES IT. Nothing here forces traffic through the
 proxy; that is the container's network topology and the HTTPS_PROXY environment
-variable. Verify with the negative test in docs/security_verification.md rather
+variable. Verify with the negative test in SECURITY.md ("Verify it yourself") rather
 than assuming: a client that ignores the proxy variables reaches the internet
 directly and this file is decoration.
 """

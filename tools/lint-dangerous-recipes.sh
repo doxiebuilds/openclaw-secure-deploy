@@ -59,5 +59,5 @@ echo "To validate a config edit, use instead:" >&2
 echo "  docker exec -e OPENCLAW_CONFIG_PATH=/tmp/candidate.json openclaw \\" >&2
 echo "    openclaw config validate --json" >&2
 echo "" >&2
-echo "See docs/launch_and_update.md. Override once with: git commit --no-verify" >&2
+echo "See README.md (Quick start). Override once with: git commit --no-verify" >&2
 exit 1
