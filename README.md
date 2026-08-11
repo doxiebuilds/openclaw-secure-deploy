@@ -35,6 +35,8 @@ So every control is enforced by the kernel, the container runtime, or the filesy
 
 That's the whole idea. Everything below is implementation.
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doxiebuilds/openclaw-secure-deploy)
+
 ## Three cells and an airlock
 
 Until you split them, one agent identity holds all three legs of what Simon Willison named the [lethal trifecta](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/): private data, untrusted content, and the ability to communicate externally. Splitting on "who is watching" does nothing about that. Injection travels along what the session is holding.
