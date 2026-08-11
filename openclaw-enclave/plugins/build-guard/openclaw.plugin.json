@@ -1,0 +1,11 @@
+{
+  "id": "build-guard",
+  "name": "Build Guard",
+  "description": "Owns the exec allowlist (wrapper scripts only), protects the config tree, and runs the test suite after every edit.",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
