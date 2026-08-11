@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability (private)
+    url: https://github.com/doxiebuilds/openclaw-secure-deploy/security/advisories/new
+    about: Don't open a public issue for vulnerabilities. Private advisory, only the maintainer sees it.
+  - name: Questions, design discussion, feedback
+    url: https://github.com/doxiebuilds/openclaw-secure-deploy/discussions
+    about: Not sure it's a bug, want to challenge the threat model, or tried a similar approach? Start here.

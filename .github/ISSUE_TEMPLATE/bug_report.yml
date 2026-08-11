@@ -1,0 +1,53 @@
+name: Bug report
+description: Something else is broken — setup, a cell, the sealer, the control plane.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - setup.sh / quick start
+        - cell 1 (scout)
+        - cell 2 (curator)
+        - cell 3 (main)
+        - quarantine-sealer / exchange pipeline
+        - egress proxies / networking
+        - control plane
+        - enclave-check / test suites
+        - docs
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got. Redact hostnames and tokens.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ./setup.sh
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: macOS 15.5 / Docker Desktop 4.43 / commit sha
+    validations:
+      required: true
+  - type: textarea
+    id: changes
+    attributes:
+      label: Local changes
+      description: Edits to compose files, openclaw.json, allowlists, or mounts. Changed networking changes the threat model — say so.
+      placeholder: none, fresh clone
+    validations:
+      required: false

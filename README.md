@@ -1,6 +1,13 @@
 # OpenClaw Secure Deployment
 
-Runs [OpenClaw](https://github.com/openclaw) as a **multi-cell** Docker enclave with almost every privilege removed. Personal project, no security audit.
+**A multi-cell, least-privilege Docker deployment for [OpenClaw](https://github.com/openclaw): untrusted web content, credentials, and open egress never share a container.** Personal project, no security audit.
+
+[![CI](https://github.com/doxiebuilds/openclaw-secure-deploy/actions/workflows/ci.yml/badge.svg)](https://github.com/doxiebuilds/openclaw-secure-deploy/actions/workflows/ci.yml)
+[![Validate Compose](https://github.com/doxiebuilds/openclaw-secure-deploy/actions/workflows/validate-compose.yml/badge.svg)](https://github.com/doxiebuilds/openclaw-secure-deploy/actions/workflows/validate-compose.yml)
+[![License: MIT](https://img.shields.io/github/license/doxiebuilds/openclaw-secure-deploy)](LICENSE)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doxiebuilds/openclaw-secure-deploy)
+
+[Quick start](#quick-start) · [What it doesn't stop](#what-this-does-not-stop) · [How it works](#three-cells-and-an-airlock) · [Verify it yourself](#verify-it-yourself) · [Security posture](SECURITY.md)
 
 An autonomous agent is useful because it runs commands without asking you first. That is also the entire problem. The property you want and the property that should worry you are the same property, and no amount of prompting removes it.
 
@@ -8,7 +15,82 @@ So this project doesn't try to make the agent trustworthy. It assumes the agent 
 
 **When that happens, how much can it reach?**
 
-The answer used to be "one directory, plus every credential you handed it." Authority is now split across cells so that hostile content, credentials and open egress never sit in the same place. What survives that split still matters, so it goes before anything else.
+The answer used to be "one directory, plus every credential you handed it." Authority is now split across cells so that hostile content, credentials and open egress never sit in the same place.
+
+```mermaid
+%% Warm fills handle untrusted content, cool is trusted, and the airlock between
+%% them is the deepest warm accent. Same ramp as ARCHITECTURE.MD; keep in sync.
+flowchart LR
+    classDef warm  fill:#e5c185,stroke:#c7522a,color:#1f2937
+    classDef warm2 fill:#dda86f,stroke:#642915,color:#1f2937
+    classDef gate  fill:#c7522a,stroke:#642915,color:#fff
+    classDef cool  fill:#80c2c2,stroke:#008585,color:#1f2937
+
+    Net(["🌐 open web"])
+    Scout["<b>Cell 1 · scout</b><br/>☣ hostile content<br/>🚫 no credentials, no repos"]
+    Sealer["<b>🔒 airlock</b><br/>deterministic script<br/>🚫 no model, no network"]
+    Curator["<b>Cell 2 · curator</b><br/>☣ normalized text only<br/>🚫 no internet, no credentials"]
+    Main["<b>Cell 3 · main</b><br/>🔑 credentials + project repo<br/>🚫 no web tools"]
+
+    Net --> Scout
+    Scout -->|"raw text"| Sealer
+    Sealer -->|"① normalized"| Curator
+    Curator -->|"draft brief"| Sealer
+    Sealer -->|"② validated briefs"| Main
+
+    class Scout warm
+    class Curator warm2
+    class Sealer gate
+    class Main cool
+```
+
+Text moves between cells only as files through a deterministic gate, never as a live context handoff. The checkable invariant: **no container holds `raw` + `normalized` + `briefs` and a model.**
+
+You don't have to take that on faith, and what the split still doesn't fix is stated before any of the implementation.
+
+## Prove it in 30 seconds
+
+No Docker required — the topology invariants are checked statically, and the checker is itself checked for falsifiability:
+
+```bash
+git clone https://github.com/doxiebuilds/openclaw-secure-deploy && cd openclaw-secure-deploy
+./setup.sh                                        # dirs + example configs, no secrets, no Docker
+python3 tools/enclave-check/check.py -v           # 8 invariants: expect 8 PASS 0 FAIL 0 UNKNOWN
+python3 tools/enclave-check/negative-controls.py  # mutate the tree: every invariant must FAIL
+```
+
+![Terminal recording: enclave-check passing 8 invariants, then negative-controls falsifying all 11 mutations](docs/images/verify.gif)
+
+Runtime proofs (`docker inspect`, read-only rootfs, the mount split) are in [Verify it yourself](#verify-it-yourself).
+
+## Why this exists
+
+Researchers counted [~135,000 OpenClaw instances exposed to the open internet](https://www.bitdefender.com/en-us/blog/hotforsecurity/135k-openclaw-ai-agents-exposed-online), and have [pulled API keys, Slack tokens and chat histories out of misconfigured deployments](https://www.infosecurity-magazine.com/news/researchers-40000-exposed-openclaw/). This project is aimed at the quieter risk that survives even a perfectly firewalled install: one agent process holding untrusted web content, your credentials, and open egress at the same time.
+
+If you self-host OpenClaw and want the blast radius of a bad day bounded by mount lists and network topology rather than by model behaviour, this is for you.
+
+## Quick start
+
+Requires Docker Desktop or Docker Engine. Defaults to [LM Studio](https://lmstudio.ai/) on the host with **Qwen 3.6 35B (A3B)** via `qwen-forward`. Point a cell's `openclaw.json` at another provider only if you understand you are changing the threat model.
+
+```bash
+./setup.sh
+# 1. Edit openclaw-docker-config/.env  (paths only, see .env.example)
+# 2. Put gateway/Slack/Perplexity secrets in macOS Keychain (or write
+#    ~/.openclaw-secrets/{openclaw,scout,curator}-secrets.json yourself)
+# 3. Copy example configs to openclaw.json for each cell and edit channel IDs
+cd openclaw-docker-config
+./launch-openclaw.sh          # preferred on macOS: Keychain, secrets, compose up
+# or: docker compose up -d --build
+```
+
+That brings up three agent cells, the sealer, and the proxies. Cell 3's UI is then on `127.0.0.1:18789`, scout on `:18829`, curator on `:18869` — localhost only.
+
+No `sudo` anywhere. The boundaries exist from first boot, not after a hardening step you might forget.
+
+The Perplexity key is optional: cell 1 runs without it and `perplexity-mcp` simply starts with search disabled. If you want it, get a key from the [Perplexity API platform](https://www.perplexity.ai/api-platform) and store it as Keychain entry `openclaw-perplexity-api-key`.
+
+There's an optional [operator UI](#control-plane-optional-operator-ui) for watching all three cells at once, and the architecture, threat model, and full verification suite are below.
 
 ## What this does not stop
 
@@ -25,7 +107,7 @@ Also out of scope:
 - Anything a cell does to files inside its own writable workspace (disposable by design)
 - Model-level surprises. A different model, a new skill, or a tool with its own network access changes the picture and this config won't know
 
-What's left after all of that is still worth having. It just isn't a guarantee, and a README that implied otherwise would be the wrong kind of document.
+What's left after all of that is still worth having. It just isn't a guarantee, and a README that implied otherwise would be the wrong kind of document. That's why this section sits above the architecture rather than below it.
 
 ## The principle: cut authority, don't extend trust
 
@@ -34,8 +116,6 @@ A capable agent holding almost no privileges is safer than a limited agent holdi
 So every control is enforced by the kernel, the container runtime, or the filesystem layout, never by the agent's cooperation. The agent is not asked to stay inside the boundary. It cannot reach the edge of it.
 
 That's the whole idea. Everything below is implementation.
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doxiebuilds/openclaw-secure-deploy)
 
 ## Three cells and an airlock
 
@@ -53,6 +133,10 @@ The boundary between cells is a file plus a deterministic gate, never a live con
 > **No container holds `raw` + `normalized` + `briefs` and a model.**
 
 That mount split is not a hole in the airlock. It *is* the airlock.
+
+![Control plane gateways view: main, scout and curator cards showing each cell's role and session counts](docs/images/control-plane-gateways.png)
+
+*The same split as the operator sees it, in the optional [control plane](#control-plane-optional-operator-ui): cell 3 holds the repo and credentials, cell 1 holds hostile content, cell 2 holds neither.*
 
 ### One model, one path
 
@@ -168,50 +252,34 @@ curl -m 3 http://<your-lan-ip>:18789
 
 If one of these doesn't behave as documented, that's a bug and I want to know. Full posture notes live in [SECURITY.md](SECURITY.md).
 
-## Quick start
+## Control plane (optional operator UI)
 
-Requires Docker Desktop or Docker Engine. Defaults to [LM Studio](https://lmstudio.ai/) on the host with **Qwen 3.6 35B (A3B)** via `qwen-forward`. Point a cell's `openclaw.json` at another provider only if you understand you are changing the threat model.
-
-```bash
-./setup.sh
-# 1. Edit openclaw-docker-config/.env  (paths only, see .env.example)
-# 2. Put gateway/Slack/Perplexity secrets in macOS Keychain (or write
-#    ~/.openclaw-secrets/{openclaw,scout,curator}-secrets.json yourself)
-# 3. Copy example configs to openclaw.json for each cell and edit channel IDs
-cd openclaw-docker-config
-./launch-openclaw.sh          # preferred on macOS: Keychain, secrets, compose up
-# or: docker compose up -d --build
-```
-
-No `sudo` anywhere. The boundaries exist from first boot, not after a hardening step you might forget.
-
-The Perplexity key is optional: cell 1 runs without it and `perplexity-mcp` simply starts with search disabled. If you want it, get a key from the [Perplexity API platform](https://www.perplexity.ai/api-platform) and store it as Keychain entry `openclaw-perplexity-api-key`.
-
-### Control plane (optional operator UI)
-
-A separate Node app projects fleet health, sessions, approvals, exchange state, and security checks. Gateways remain source of truth.
+A separate Node app projects fleet health, sessions, approvals, exchange state, and security checks across the three cells. It enforces nothing — gateways remain the source of truth — so the enclave runs perfectly well without it.
 
 ![Control plane dashboard: three gateways online, agent count, pending approvals](docs/images/control-plane-dashboard.png)
 
 *Dashboard — fleet health across the three cells. Nothing here enforces anything; it reads state the gateways already own.*
 
-![Control plane gateways view: main, scout and curator cards showing each cell's role and session counts](docs/images/control-plane-gateways.png)
-
-*Gateways — the same split described above, as the operator sees it: cell 3 holds the repo and credentials, cell 1 holds hostile content, cell 2 holds neither.*
-
 ![A session on cell 3: a question to the agent and its reply, with the reasoning trace collapsed above it](docs/images/control-plane-session.png)
 
 *A session on cell 3, answered by the local Qwen through `qwen-forward`. Pending approvals for that cell sit beside the transcript, so an exec request is visible in the same place as the turn that caused it.*
 
+Needs Node 20+ and the enclave already running:
+
 ```bash
 cd control-plane
 npm install
+
+# Once per clone: pair this clone's Ed25519 device identity with each gateway.
+# Skip it and every gateway shows offline. Re-running is safe.
+node scripts/bootstrap/pair-control-plane.mjs
+
 npm run dev:api   # terminal 1
 npm run dev:web   # terminal 2
 # http://127.0.0.1:5173/  default admin/admin, change CONTROL_PLANE_PASSWORD
 ```
 
-The control plane pairs to each gateway with its own Ed25519 device identity; run `node scripts/bootstrap/pair-control-plane.mjs` once per clone, or the fleet shows offline.
+Features, the source-of-truth split, and the package layout are in [control-plane/README.md](control-plane/README.md).
 
 ## Secrets
 
@@ -247,7 +315,7 @@ These controls are tied to the versions this was built against (see digests in t
 
 ## Contributing
 
-Issues and PRs are limited to collaborators. Everyone else, open a Discussion. Feedback and independent review are genuinely welcome, and I'll fold in what makes sense. Security reports go through [SECURITY.md](SECURITY.md).
+Issues and PRs are welcome. If a verification command doesn't behave as documented, that is exactly the bug report I want — there's an [issue template](.github/ISSUE_TEMPLATE) for it. Questions and design discussion belong in Discussions; feedback and independent review are genuinely welcome, and I'll fold in what makes sense. Security reports go through [SECURITY.md](SECURITY.md), privately.
 
 Contributions are accepted under the same MIT terms as the rest of the repository.
 

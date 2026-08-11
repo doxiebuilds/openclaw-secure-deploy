@@ -1,0 +1,75 @@
+<!-- Social preview card, 1280x640.
+     Colors are the control-plane palette tokens (light theme), not ad-hoc
+     picks: control-plane/apps/web/src/styles/themes/palette.css
+       ocp-canvas #f6f6f4 · ocp-raised #ffffff · ocp-edge #e4e4df
+       ocp-accent #ff8205 · ocp-ink #1a1a18 · ocp-ink-2 #5c5c57
+       ocp-ink-3 #8a8a84 · ocp-ash #a8a8a2
+     That palette is warm paper over a warm near-black, never blue slate.
+     Cell fills stay on the ARCHITECTURE.MD warm-to-cool ramp, where warm
+     means "handles untrusted content" and cool means trusted. Keep both
+     systems in sync if either moves. Regenerate:
+       rsvg-convert -w 1280 -h 640 docs/images/social-preview.svg
+         -o docs/images/social-preview.png -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a8a8a2"/>
+    </marker>
+  </defs>
+
+  <!-- canvas: warm paper, per ocp-canvas -->
+  <rect width="1280" height="640" fill="#f6f6f4"/>
+
+  <!-- title block -->
+  <text x="64" y="94" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="24" fill="#8a8a84">doxiebuilds /</text>
+  <text x="64" y="150" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="50" font-weight="700" fill="#1a1a18">openclaw-secure-deploy</text>
+  <text x="64" y="206" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="26" fill="#5c5c57">Untrusted web content, credentials, and open egress</text>
+  <text x="64" y="240" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="26" fill="#5c5c57">never share a container.</text>
+
+  <!-- raised card, echoing the control plane's panel chrome -->
+  <rect x="64" y="286" width="1152" height="186" rx="16" fill="#ffffff" stroke="#e4e4df" stroke-width="2"/>
+
+  <!-- cell 1: scout -->
+  <rect x="96" y="318" width="230" height="122" rx="12" fill="#e5c185" stroke="#c7522a" stroke-width="2"/>
+  <text x="211" y="356" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="20" font-weight="700" fill="#1f2937">CELL 1 · SCOUT</text>
+  <text x="211" y="386" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" fill="#3a2a1a">reads hostile content</text>
+  <text x="211" y="410" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" fill="#3a2a1a">no credentials · no repos</text>
+
+  <line x1="326" y1="379" x2="398" y2="379" stroke="#a8a8a2" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- the airlock: deepest warm in the ramp, last warm thing on the path -->
+  <rect x="404" y="318" width="165" height="122" rx="12" fill="#c7522a" stroke="#642915" stroke-width="2"/>
+  <text x="486" y="352" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="20" font-weight="700" fill="#ffffff">AIRLOCK</text>
+  <text x="486" y="380" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" fill="#ffe4d6">deterministic script</text>
+  <text x="486" y="402" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" fill="#ffe4d6">no model</text>
+  <text x="486" y="424" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" fill="#ffe4d6">no network</text>
+
+  <line x1="569" y1="379" x2="641" y2="379" stroke="#a8a8a2" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- cell 2: curator -->
+  <rect x="647" y="318" width="230" height="122" rx="12" fill="#dda86f" stroke="#642915" stroke-width="2"/>
+  <text x="762" y="356" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="20" font-weight="700" fill="#1f2937">CELL 2 · CURATOR</text>
+  <text x="762" y="386" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" fill="#3a2a1a">distills briefs</text>
+  <text x="762" y="410" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" fill="#3a2a1a">no internet · no credentials</text>
+
+  <line x1="877" y1="379" x2="949" y2="379" stroke="#a8a8a2" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- cell 3: main — cool, the trusted end -->
+  <rect x="955" y="318" width="230" height="122" rx="12" fill="#80c2c2" stroke="#008585" stroke-width="2"/>
+  <text x="1070" y="356" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="20" font-weight="700" fill="#1f2937">CELL 3 · MAIN</text>
+  <text x="1070" y="386" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" fill="#123b3b">credentials · project repo</text>
+  <text x="1070" y="410" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" fill="#123b3b">no web tools</text>
+
+  <!-- invariant, flagged with the brand accent -->
+  <rect x="64" y="508" width="5" height="30" rx="2.5" fill="#ff8205"/>
+  <text x="86" y="532" font-family="Menlo, Consolas, monospace" font-size="20" fill="#1a1a18">invariant: no container holds raw + normalized + briefs and a model</text>
+
+  <!-- posture chips -->
+  <g font-family="Menlo, Consolas, monospace" font-size="15" fill="#8a8a84">
+    <text x="64" y="586">read-only root</text>
+    <text x="232" y="586">cap_drop: ALL</text>
+    <text x="400" y="586">no docker socket</text>
+    <text x="596" y="586">default-deny egress</text>
+    <text x="820" y="586">local inference only</text>
+  </g>
+</svg>
