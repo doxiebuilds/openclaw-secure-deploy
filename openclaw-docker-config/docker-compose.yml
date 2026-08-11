@@ -682,19 +682,24 @@ services:
           memory: 256M
 
   # ═══ main-egress-proxy — default-deny allowlist for cell 3 ══════════════════════════════════════════════════════════════════════════════════════════════
-  # STAGED, NOT YET IN USE. This runs, but `openclaw` is still on the NAT'd
-  # `default` bridge and does not point at it. Attaching cell 3 is done by the
-  # override file docker-compose.cell3-proxy.yml, and only after the spike in
-  # SECURITY.md ("Network") shows Slack socket mode and the model SDK
-  # both honour HTTP(S)_PROXY. Shipping it half-working was refused before;
-  # this is the same refusal with the proxy pre-built so the test is one
-  # command instead of a rewrite.
+  # LIVE, AND THE ONLY WAY OUT FOR CELL 3 since 2026-08-01, when the spike in
+  # SECURITY.md ("Network") showed Slack socket mode and the Linear MCP endpoint
+  # both honour HTTP(S)_PROXY. `openclaw` sits on net_main alone and net_main is
+  # `internal: true`, so there is no default route to fall back to: if this
+  # container is down, cell 3 reaches nothing, which is the intended failure
+  # direction.
+  #
+  # The opt-out runs the other way now. docker-compose.cell3-bridge.yml is a
+  # REVERT override that puts cell 3 back on the NAT'd bridge; there is no
+  # cell3-proxy.yml, because the proxy is the default rather than the thing you
+  # opt into. Shipping it half-working was refused before, and the refusal held
+  # until the spike passed.
   #
   # THE ALLOWLIST IS DERIVED, NOT GUESSED. Cell 3's config declares exactly
   # three outbound needs: Slack (socket mode), the Linear MCP endpoint, and the
-  # local Qwen. Qwen is not here because it goes via qwen-forward, which is not
-  # egress. Anything else cell 3 reaches today is unaccounted for, which is the
-  # entire point of turning this on — the DENY lines are the finding.
+  # local Qwen. Qwen is not in EGRESS_ALLOW because it goes via qwen-forward,
+  # which is not egress. Anything else cell 3 tries to reach is unaccounted for
+  # and fails closed — the DENY lines in this proxy's log are the finding.
   main-egress-proxy:
     build:
       context: .
