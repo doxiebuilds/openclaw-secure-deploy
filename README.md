@@ -1,6 +1,6 @@
 # OpenClaw Secure Deployment
 
-**A multi-cell, least-privilege Docker deployment for [OpenClaw](https://github.com/openclaw): untrusted web content, credentials, and open egress never share a container.** Personal project, no security audit.
+**This is a multi-cell, least-privilege Docker deployment for [OpenClaw](https://github.com/openclaw): untrusted web content, credentials, and open egress never share a container.** Personal project, no security audit.
 
 [![CI](https://github.com/doxiebuilds/openclaw-secure-deploy/actions/workflows/ci.yml/badge.svg)](https://github.com/doxiebuilds/openclaw-secure-deploy/actions/workflows/ci.yml)
 [![Validate Compose](https://github.com/doxiebuilds/openclaw-secure-deploy/actions/workflows/validate-compose.yml/badge.svg)](https://github.com/doxiebuilds/openclaw-secure-deploy/actions/workflows/validate-compose.yml)
@@ -11,11 +11,11 @@
 
 An autonomous agent is useful because it runs commands without asking you first. That is also the entire problem. The property you want and the property that should worry you are the same property, and no amount of prompting removes it.
 
-So this project doesn't try to make the agent trustworthy. It assumes the agent will eventually do something you didn't intend, through a bug, a bad model day, or a webpage that told it to, and asks a narrower question:
+So this project does not attempt to make the agent trustworthy. It assumes the agent will eventually act outside your intent, whether due to a bug, a model error, or hostile input. The focus is on a narrower question:
 
 **When that happens, how much can it reach?**
 
-The answer used to be "one directory, plus every credential you handed it." Authority is now split across cells so that hostile content, credentials and open egress never sit in the same place.
+Previously, the agent could access one directory and all credentials provided to it. Now, authority is split across cells. Hostile content, credentials, and open egress are never combined.
 
 ```mermaid
 %% Warm fills handle untrusted content, cool is trusted, and the airlock between
@@ -44,9 +44,9 @@ flowchart LR
     class Main cool
 ```
 
-Text moves between cells only as files through a deterministic gate, never as a live context handoff. The checkable invariant: **no container holds `raw` + `normalized` + `briefs` and a model.**
+Text moves between cells only as files through a deterministic gate. There is no live context handoff. The key invariant is that **no container holds `raw` + `normalized` + `briefs` along with a model.**
 
-You don't have to take that on faith, and what the split still doesn't fix is stated before any of the implementation.
+You can verify this design directly. The limitations of the split are stated before any implementation details.
 
 ## Prove it in 30 seconds
 
@@ -65,9 +65,9 @@ Runtime proofs (`docker inspect`, read-only rootfs, the mount split) are in [Ver
 
 ## Why this exists
 
-Researchers counted [~135,000 OpenClaw instances exposed to the open internet](https://www.bitdefender.com/en-us/blog/hotforsecurity/135k-openclaw-ai-agents-exposed-online), and have [pulled API keys, Slack tokens and chat histories out of misconfigured deployments](https://www.infosecurity-magazine.com/news/researchers-40000-exposed-openclaw/). This project is aimed at the quieter risk that survives even a perfectly firewalled install: one agent process holding untrusted web content, your credentials, and open egress at the same time.
+Researchers have found about [~135,000 OpenClaw instances exposed to the open internet](https://www.bitdefender.com/en-us/blog/hotforsecurity/135k-openclaw-ai-agents-exposed-online), and have [pulled API keys, Slack tokens and chat histories out of misconfigured deployments](https://www.infosecurity-magazine.com/news/researchers-40000-exposed-openclaw/). This project addresses the risk that remains even with a properly firewalled installation: a single agent process holding untrusted web content, credentials, and open egress.
 
-If you self-host OpenClaw and want the blast radius of a bad day bounded by mount lists and network topology rather than by model behaviour, this is for you.
+If you self-host OpenClaw and want to limit risk through mount lists and network topology instead of relying on model behavior, this approach is designed for you.
 
 ## Quick start
 
@@ -84,19 +84,19 @@ cd openclaw-docker-config
 # or: docker compose up -d --build
 ```
 
-That brings up three agent cells, the sealer, and the proxies. Cell 3's UI is then on `127.0.0.1:18789`, scout on `:18829`, curator on `:18869` — localhost only.
+This starts three agent cells, the sealer, and the proxies. Cell 3 UI is at `127.0.0.1:18789`, scout at `:18829`, curator at `:18869`. All are bound to localhost.
 
-No `sudo` anywhere. The boundaries exist from first boot, not after a hardening step you might forget.
+No `sudo` anywhere. Boundaries are enforced from the first boot, not as a later hardening step.
 
 The Perplexity key is optional: cell 1 runs without it and `perplexity-mcp` simply starts with search disabled. If you want it, get a key from the [Perplexity API platform](https://www.perplexity.ai/api-platform) and store it as Keychain entry `openclaw-perplexity-api-key`.
 
-There's an optional [operator UI](#control-plane-optional-operator-ui) for watching all three cells at once, and the architecture, threat model, and full verification suite are below.
+An operation [operator UI](#control-plane-optional-operator-ui) is available to monitor all three cells. The architecture, threat model, and full verification suite are described below.
 
 ## What this does not stop
 
 **Prompt injection.** The containers are walls between the agent and your host. They are not walls between an agent and its own instructions. If a cell processes a malicious webpage, email or file, it will follow instructions embedded in that content.
 
-What the split changes is reach. The cell that reads the open web holds no Slack tokens and no project repos. The cell that holds credentials has no web tools.
+The split limits reach. The cell that reads the open web does not hold Slack tokens or project repositories. The cell with credentials does not have web tools.
 
 What the split does not change: cell 3 holds Slack, Linear and your project repo, and it reads briefs distilled from text that scout fetched off the open web. The phase ② schema check is the last thing standing between those two facts. A payload that satisfies a closed-key schema and survives `evidence_excerpt` resolution reaches the cell holding your credentials. That barrier is deterministic and small, which is why I trust it more than I would trust a model, but it is one barrier and not a guarantee.
 
@@ -111,15 +111,15 @@ What's left after all of that is still worth having. It just isn't a guarantee, 
 
 ## The principle: cut authority, don't extend trust
 
-A capable agent holding almost no privileges is safer than a limited agent holding all of them. Capability is hard to predict. Authority is a config file, and here, a mount list.
+An agent with minimal privileges is safer than a limited agent with broad authority. Capability is unpredictable. Authority is defined by configuration, specifically the mount list.
 
-So every control is enforced by the kernel, the container runtime, or the filesystem layout, never by the agent's cooperation. The agent is not asked to stay inside the boundary. It cannot reach the edge of it.
+Every control is enforced by the kernel, the container runtime, or the filesystem layout. The agent is not relied on to respect boundaries; it cannot reach beyond them.
 
-That's the whole idea. Everything below is implementation.
+This is the core principle. The following sections cover implementation.
 
 ## Three cells and an airlock
 
-Until you split them, one agent identity holds all three legs of what Simon Willison named the [lethal trifecta](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/): private data, untrusted content, and the ability to communicate externally. Splitting on "who is watching" does nothing about that. Injection travels along what the session is holding.
+Without splitting, one agent identity holds all three legs of what Simon Willison named the [lethal trifecta](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/): private data, untrusted content, and the ability to communicate externally. Splitting on "who is watching" does nothing about that. Injection travels along what the session is holding.
 
 | Cell | Role | Holds | Does not hold |
 |---|---|---|---|
@@ -194,7 +194,7 @@ Assumed out of reach: bugs in Docker, the host OS, OpenClaw, or the model. Those
 | Secrets not in process env | Docker secrets JSON files under `~/.openclaw-secrets/` (SecretRefs in config) |
 | Local inference only | `qwen-forward` multi-homes every cell to host LM Studio. No paid provider in-cell |
 
-Bypassing one control should not hand you the others. That is the only reason there are many instead of two.
+Bypassing one control does not grant access to others. This is why multiple controls exist instead of just two.
 
 **On gateway bindings.** Main UI is published as `127.0.0.1:18789`, scout `:18829`, curator `:18869`. That means local machine only. Rebind to `0.0.0.0` and you have published agent control planes to your network. If you change networking, the exposure is yours to verify.
 
@@ -254,11 +254,11 @@ If one of these doesn't behave as documented, that's a bug and I want to know. F
 
 ## Control plane (optional operator UI)
 
-A separate Node app projects fleet health, sessions, approvals, exchange state, and security checks across the three cells. It enforces nothing — gateways remain the source of truth — so the enclave runs perfectly well without it.
+A separate Node application monitors fleet health, sessions, approvals, exchange state, and security checks across the three cells. It does not enforce controls; gateways remain the source of truth. The enclave operates fully without it.
 
 ![Control plane dashboard: three gateways online, agent count, pending approvals](docs/images/control-plane-dashboard.png)
 
-*Dashboard — fleet health across the three cells. Nothing here enforces anything; it reads state the gateways already own.*
+*The dashboard displays fleet health across the three cells. It does not enforce controls and only reads state from the gateways.*
 
 ![A session on cell 3: a question to the agent and its reply, with the reasoning trace collapsed above it](docs/images/control-plane-session.png)
 
@@ -321,8 +321,8 @@ Contributions are accepted under the same MIT terms as the rest of the repositor
 
 ## Disclaimer
 
-Personal project, built solo, never professionally audited. It reduces the authority available to an OpenClaw deployment by splitting cells and cutting mounts. It does not eliminate risk, and the prompt-injection gap above is real and only partially contained.
+This is a personal project, built independently and not professionally audited. It reduces the authority available to an OpenClaw deployment by splitting cells and limiting mounts. It does not eliminate risk. The prompt-injection gap described above remains and is only partially contained.
 
-No liability is accepted for any loss arising from use of this project or from an agent misinterpreting it: data loss, service disruption, credential leakage, or anything else. Read the config before you trust it with real keys. Don't point it at anything you can't afford to lose.
+No liability is accepted for any loss resulting from use of this project or from agent misinterpretation, including data loss, service disruption, or credential leakage. Review the configuration before using real keys. Do not use this with anything you cannot afford to lose.
 
 Not affiliated with or endorsed by the OpenClaw maintainers.

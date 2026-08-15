@@ -2,9 +2,9 @@
 
 ## Reporting a vulnerability
 
-Don't open a public issue. Use GitHub's [private vulnerability reporting](https://github.com/doxiebuilds/openclaw-secure-deploy/security/advisories/new), which opens a draft advisory only the maintainer can see. No email needed.
+Do not open a public issue. Report vulnerabilities using GitHub's private reporting: [private vulnerability reporting](https://github.com/doxiebuilds/openclaw-secure-deploy/security/advisories/new), which opens a draft advisory only the maintainer can see. No email needed.
 
-Useful reports include what you found, how to reproduce it, which component is affected, and what an attacker gets out of it. A suggested fix is welcome but not required.
+Useful reports include what you found, how to reproduce it, which component is affected, and the potential impact. Suggest a fix if you have one.
 
 One person maintains this in their spare time, so there is no response SLA. I read every report and I'd rather hear about a problem late than not at all.
 
@@ -16,15 +16,15 @@ One person maintains this in their spare time, so there is no response SLA. I re
 
 ## What this does not protect against
 
-Not an exhaustive list. These are the categories that matter most.
+This is not a complete list. These are the main categories.
 
 **Prompt injection.** Everything here hardens cells against the host and against each other. None of it hardens a model against being tricked. If scout processes a malicious webpage, it will follow instructions in that content.
 
 What the layout buys you is that scout holds no Slack token, no project mount, and can only write into `exchange/raw` for a deterministic sealer to process.
 
-What it does not buy you is a clean break. Main holds Slack, Linear and your project repo, and it reads briefs distilled from the same text scout fetched. The phase ② schema check is the last thing standing between those two facts: a closed-key schema, a sha that must match the source, and `evidence_excerpt` resolved from numbered source lines. A payload that satisfies all three reaches the cell holding your credentials. That barrier is deterministic and small, which is why I trust it more than I would trust a model, but it is one barrier and not a guarantee.
+This is not a complete separation. Main holds Slack, Linear, and your project repo, and reads briefs from the same text scout fetched. The schema check is the last barrier: a closed-key schema, a matching sha, and `evidence_excerpt` resolved from source lines. If a payload passes all three, it reaches the cell with your credentials. This barrier is deterministic and small. It is not a guarantee.
 
-**Perplexity's server-side fetch.** Optional `perplexity-mcp` holds an API key outside any agent process and can retrieve content from hosts that are not on scout's egress allowlist. The allowlist bounds where scout's own connections terminate. Server-side retrieval is a different channel. Scout still cannot reach your repos or main's secrets.
+**Perplexity's server-side fetch.** Optional `perplexity-mcp` holds an API key outside any agent process and can retrieve content from hosts that are not on scout's egress allowlist. The allowlist bounds where scout's own connections terminate. Server-side retrieval uses a separate channel. Scout cannot access your repos or main's secrets.
 
 **Unknown vulnerabilities.** A container escape in the kernel, Docker, containerd, or runc bypasses every control below. Same for a bug in OpenClaw itself or in any skill, tool, or dependency it loads.
 
@@ -32,7 +32,7 @@ What it does not buy you is a clean break. Main holds Slack, Linear and your pro
 
 ## What is enforced
 
-Every control below is enforced by the kernel, the container runtime, or the mount list. None of it depends on the agent choosing to cooperate.
+All controls below are enforced by the kernel, container runtime, or mount list. They do not rely on agent cooperation.
 
 ### Container (each agent cell)
 
@@ -54,11 +54,11 @@ Every control below is enforced by the kernel, the container runtime, or the mou
 
 ### Docker API
 
-Agent cells never touch `/var/run/docker.sock`. There is no socket proxy in the default stack. Nested sandboxing was removed on purpose, see the note at the top of this file.
+Agent cells do not access `/var/run/docker.sock`. There is no socket proxy in the default stack. Nested sandboxing was removed on purpose, see the note at the top of this file.
 
 ### Filesystem
 
-Writable paths are cell-specific workspaces, plus the exchange directories each cell is allowed to touch. Example configs and scripts mount read-only where possible. Host paths outside the enclave are invisible.
+Cells can write only to their own workspace and allowed exchange directories. Configs and scripts mount read-only where possible. Host paths outside the enclave are not visible.
 
 **The mount list is the security boundary.** Main does not mount `exchange/raw` or `exchange/normalized`. Even if every in-process guard fails, main cannot read hostile fetched text at the Docker layer. There is a command below that checks this.
 
@@ -76,7 +76,7 @@ Outbound internet access from scout exists on purpose. Web search and Perplexity
 
 ### Secrets
 
-Never commit secrets to this repository.
+Do not commit secrets to this repository.
 
 - Gateway and Slack tokens are **not** injected as environment variables into agent processes. They arrive as Docker secrets files under `/run/secrets/`, referenced from config via SecretRefs.
 - On the host they live under `~/.openclaw-secrets/` (outside the git tree), mode `0600`.

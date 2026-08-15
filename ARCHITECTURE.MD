@@ -1,16 +1,15 @@
 # Architecture
 
-Three diagrams, on purpose. Network topology, inference, and scout's tool loop share almost no nodes. Stuffing them into one chart just produces crossings.
+There are three diagrams. Network topology, inference, and the scout tool loop have few shared nodes. Combining them in one chart would reduce clarity.
 
 The inference fabric lives in the [README](../README.md#one-model-one-path), because every cell has the same relationship to it and it is the shortest of the three. The other two are here.
 
-Design notes and maintenance warnings are kept as comments inside the Mermaid blocks. They are invisible in the rendered view and intended for whoever edits these next.
-
+Design notes and maintenance warnings are included as comments in the Mermaid blocks. These are not visible in the rendered view and are for future editors.
 ---
 
 ## 1. Scout: one scheduled run
 
-**The model never touches the internet.** LM Studio returns JSON with `tool_calls[]`. The gateway process inside the scout container performs the network I/O.
+**The model never touches the internet.** LM Studio returns JSON with `tool_calls[]`. The gateway process inside the scout container handles the network I/O.
 
 ```mermaid
 flowchart LR
@@ -62,13 +61,13 @@ flowchart LR
     class Trigger,Skip,Tick inert
 ```
 
-**Perplexity is not on the egress allowlist.** It is an MCP sidecar that holds `PERPLEXITY_API_KEY` outside any agent process and can read arbitrary sites server-side. That is accepted: scout holds nothing worth stealing and can only emit into `exchange/raw`, behind the sealer.
+**Perplexity is not on the egress allowlist.** It is an MCP sidecar that holds `PERPLEXITY_API_KEY` outside agent processes and can read sites server-side. This is acceptable. Scout does not store sensitive data and can only write to `exchange/raw`, which is protected by the sealer.
 
 ---
 
 ## 2. Cells, networks, and the content pipeline
 
-Inference is omitted here on purpose. It is in the README, and every cell has the same relationship to it. What this shows is reach: who can dial whom, where the human gate sits, and how fetched text travels to cell 3.
+Inference is not shown here. It is covered in the README, and each cell connects to it in the same way. This diagram shows reach: which components can connect, where human approval is required, and how fetched text moves to cell 3.
 
 ```mermaid
 flowchart TB
